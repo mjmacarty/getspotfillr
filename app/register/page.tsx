@@ -25,10 +25,15 @@ export default async function RegisterPage({
     const fullName = formData.get('fullName') as string
     const clubName = formData.get('clubName') as string
     const chosenPlan = formData.get('plan') as string
+    const rawPhone = formData.get('phone') as string
+
+    // Clean phone number: preserve leading '+' if present, strip all other non-digit characters
+    const phone = rawPhone ? rawPhone.replace(/(?!^\+)[^\d]/g, '') : null
 
     const supabase = await createClient()
 
-    const { error } = await supabase.auth.signUp({
+    // 1. Sign up user in Supabase Auth
+    const { data: authData, error: authError } = await supabase.auth.signUp({
       email,
       password,
       options: {
@@ -36,12 +41,31 @@ export default async function RegisterPage({
           full_name: fullName,
           club_name: clubName,
           plan: chosenPlan,
+          phone: phone,
         },
       },
     })
 
-    if (error) {
-      return redirect(`/register?plan=${chosenPlan}&message=${encodeURIComponent(error.message)}`)
+    if (authError) {
+      return redirect(`/register?plan=${chosenPlan}&message=${encodeURIComponent(authError.message)}`)
+    }
+
+    // 2. Create the coach row in the database table
+    if (authData.user) {
+      const { error: dbError } = await supabase
+        .from('coaches')
+        .insert({
+          id: authData.user.id,
+          email,
+          full_name: fullName,
+          club_name: clubName,
+          plan: chosenPlan,
+          phone: phone,
+        })
+
+      if (dbError) {
+        return redirect(`/register?plan=${chosenPlan}&message=${encodeURIComponent(dbError.message)}`)
+      }
     }
 
     return redirect('/dashboard')
@@ -138,6 +162,22 @@ export default async function RegisterPage({
                 placeholder="Leo Fencing Club"
                 className="w-full bg-slate-950 border border-slate-800 rounded-lg p-2.5 sm:p-3 text-xs sm:text-sm text-white focus:outline-none focus:border-blue-500 transition"
               />
+            </div>
+
+            <div>
+              <label className="block text-[11px] font-medium text-slate-400 mb-1.5 uppercase tracking-wider">
+                Mobile Phone (for SMS Slot Alerts)
+              </label>
+              <input
+                type="tel"
+                name="phone"
+                required
+                placeholder="(555) 000-0000"
+                className="w-full bg-slate-950 border border-slate-800 rounded-lg p-2.5 sm:p-3 text-xs sm:text-sm text-white focus:outline-none focus:border-blue-500 transition"
+              />
+              <p className="mt-1 text-[10px] text-slate-500">
+                Used to notify you via text when an open slot is booked.
+              </p>
             </div>
 
             <div>
