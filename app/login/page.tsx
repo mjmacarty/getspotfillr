@@ -109,6 +109,14 @@ export default async function LoginPage({
             </button>
           </form>
 
+          {/* Registration Link for new users */}
+          <div className="text-center text-xs text-slate-400 pt-4 border-t border-slate-800">
+            Need an account?{' '}
+            <Link href="/register?plan=solo" className="text-blue-400 hover:underline font-medium">
+              Start Free Trial
+            </Link>
+          </div>
+
         </div>
       </main>
 

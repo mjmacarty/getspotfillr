@@ -1,11 +1,16 @@
-// app/members/page.tsx
 import { createClient } from '@/lib/supabase/server'
 import { redirect } from 'next/navigation'
 import { revalidatePath } from 'next/cache'
 import Link from 'next/link'
 
-export default async function MembersPage() {
+interface MembersPageProps {
+  searchParams: Promise<{ error?: string }>
+}
+
+export default async function MembersPage({ searchParams }: MembersPageProps) {
   const supabase = await createClient()
+  const resolvedParams = await searchParams
+  const pageError = resolvedParams?.error
 
   // 1. Auth Guard
   const { data: { user }, error } = await supabase.auth.getUser()
@@ -13,18 +18,29 @@ export default async function MembersPage() {
     redirect('/login')
   }
 
-  // 2. Fetch Coach Details
+  // 2. Fetch Coach & Associated Club Details
   const { data: coach } = await supabase
     .from('coaches')
-    .select('id, name')
+    .select('id, name, club_id, clubs(plan_tier)')
     .eq('id', user.id)
     .single()
 
-  // 3. Fetch Active Member Roster
+  const clubId = coach?.club_id
+  // Access plan_tier cleanly from joined relation
+  const rawClub = coach?.clubs as unknown as { plan_tier: string } | null
+  const planTier = rawClub?.plan_tier || 'solo'
+
+  // 3. Fetch Active Member Roster for THIS Club
   const { data: members } = await supabase
     .from('members')
     .select('*')
+    .eq('club_id', clubId)
     .order('name', { ascending: true })
+
+  const memberCount = members?.length || 0
+  const isSoloPlan = planTier === 'solo'
+  const maxMembers = 50
+  const percentageUsed = isSoloPlan ? Math.min(100, Math.round((memberCount / maxMembers) * 100)) : 0
 
   // SERVER ACTION: Sign Out
   async function signOutAction() {
@@ -45,16 +61,35 @@ export default async function MembersPage() {
 
     if (!name) return
 
+    // Fetch user/coach inside action context
+    const { data: { user } } = await supabase.auth.getUser()
+    if (!user) redirect('/login')
+
+    const { data: coach } = await supabase
+      .from('coaches')
+      .select('club_id')
+      .eq('id', user.id)
+      .single()
+
     const { error: insertError } = await supabase
       .from('members')
       .insert({
+        club_id: coach?.club_id,
         name,
         email: email || null,
         phone: phone || null,
       })
 
-    if (insertError) console.error('Error adding member:', insertError)
+    if (insertError) {
+      console.error('Error adding member:', insertError)
+      if (insertError.message.includes('MEMBER_LIMIT_EXCEEDED')) {
+        redirect('/members?error=limit_exceeded')
+      }
+      redirect('/members?error=add_failed')
+    }
+
     revalidatePath('/members')
+    redirect('/members')
   }
 
   // SERVER ACTION: Update Existing Member
@@ -99,7 +134,7 @@ export default async function MembersPage() {
     revalidatePath('/members')
   }
 
-  // SERVER ACTION: CSV Batch Upload with Upsert (Prevents duplicates)
+  // SERVER ACTION: CSV Batch Upload
   async function uploadCsvAction(formData: FormData) {
     'use server'
     const supabase = await createClient()
@@ -107,27 +142,36 @@ export default async function MembersPage() {
 
     if (!file || file.size === 0) return
 
+    const { data: { user } } = await supabase.auth.getUser()
+    if (!user) redirect('/login')
+
+    const { data: coach } = await supabase
+      .from('coaches')
+      .select('club_id')
+      .eq('id', user.id)
+      .single()
+
     const text = await file.text()
     const lines = text.split(/\r?\n/).filter((line) => line.trim().length > 0)
 
-    if (lines.length < 2) return // Requires header + at least 1 row
+    if (lines.length < 2) return
 
-    // Parse header row
     const headers = lines[0].split(',').map((h) => h.trim().toLowerCase().replace(/['"]/g, ''))
     const nameIdx = headers.findIndex((h) => h.includes('name'))
     const emailIdx = headers.findIndex((h) => h.includes('email'))
     const phoneIdx = headers.findIndex((h) => h.includes('phone') || h.includes('mobile') || h.includes('cell'))
 
-    if (emailIdx === -1) return // Must have an email column for unique constraint matching
+    if (emailIdx === -1) return
 
     const records = []
 
     for (let i = 1; i < lines.length; i++) {
       const cols = lines[i].split(',').map((c) => c.trim().replace(/['"]/g, ''))
       const email = cols[emailIdx]
-      if (!email) continue // Skip rows with blank email
+      if (!email) continue
 
       records.push({
+        club_id: coach?.club_id,
         name: nameIdx !== -1 && cols[nameIdx] ? cols[nameIdx] : 'Member',
         email: email.toLowerCase().trim(),
         phone: phoneIdx !== -1 && cols[phoneIdx] ? cols[phoneIdx] : null,
@@ -135,15 +179,21 @@ export default async function MembersPage() {
     }
 
     if (records.length > 0) {
-      // Upsert: Updates existing records by email conflict or inserts new ones
       const { error: batchError } = await supabase
         .from('members')
         .upsert(records, { onConflict: 'email' })
 
-      if (batchError) console.error('Error upserting CSV members:', batchError)
+      if (batchError) {
+        console.error('Error upserting CSV members:', batchError)
+        if (batchError.message.includes('MEMBER_LIMIT_EXCEEDED')) {
+          redirect('/members?error=limit_exceeded')
+        }
+        redirect('/members?error=upload_failed')
+      }
     }
 
     revalidatePath('/members')
+    redirect('/members')
   }
 
   return (
@@ -163,7 +213,6 @@ export default async function MembersPage() {
             </div>
 
             <div className="flex items-center gap-3">
-              {/* Desktop Nav Links */}
               <nav className="hidden md:flex items-center gap-4 text-sm font-medium border-r border-slate-800 pr-6">
                 <Link href="/dashboard" className="text-slate-400 hover:text-white transition">
                   Dashboard
@@ -210,6 +259,63 @@ export default async function MembersPage() {
           </nav>
         </header>
 
+        {/* 🚀 Limit Exceeded Error Banner */}
+        {pageError === 'limit_exceeded' && (
+          <div className="p-4 bg-amber-950/80 border border-amber-800 text-amber-200 rounded-xl space-y-2">
+            <div className="flex items-center justify-between">
+              <p className="font-semibold text-sm">Member Limit Reached</p>
+              <span className="text-xs uppercase font-bold tracking-wider px-2 py-0.5 bg-amber-900/60 border border-amber-700/80 rounded text-amber-300">
+                Solo Plan
+              </span>
+            </div>
+            <p className="text-xs text-amber-300/90">
+              Your Solo plan is capped at 50 active members. Upgrade to the Club plan for unlimited members and extra coach seats!
+            </p>
+            <div className="pt-1">
+              <Link
+                href="/settings"
+                className="inline-block px-3 py-1.5 text-xs font-bold bg-amber-500 text-slate-950 rounded-lg hover:bg-amber-400 transition"
+              >
+                Upgrade to Club Plan
+              </Link>
+            </div>
+          </div>
+        )}
+
+        {/* Member Usage Progress Card */}
+        <div className="bg-slate-900 border border-slate-800 rounded-xl p-4 sm:p-5 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+          <div className="space-y-1 w-full sm:w-auto">
+            <div className="flex items-center gap-2">
+              <h3 className="text-xs font-semibold uppercase tracking-wider text-slate-400">Roster Capacity</h3>
+              <span className="text-[10px] uppercase font-bold px-1.5 py-0.5 bg-slate-800 border border-slate-700 rounded text-slate-300">
+                {planTier} plan
+              </span>
+            </div>
+            <p className="text-sm font-bold text-white">
+              {memberCount} {isSoloPlan ? `/ ${maxMembers}` : ''} Active Members
+            </p>
+          </div>
+
+          <div className="w-full sm:w-64 space-y-1.5">
+            <div className="flex justify-between text-[11px] font-medium text-slate-400">
+              <span>{isSoloPlan ? 'Solo Plan Limit' : 'Club Tier'}</span>
+              <span>{isSoloPlan ? `${percentageUsed}%` : 'Unlimited'}</span>
+            </div>
+            <div className="w-full h-2 bg-slate-950 rounded-full overflow-hidden border border-slate-800">
+              <div 
+                className={`h-full transition-all duration-500 ${
+                  percentageUsed >= 100 
+                    ? 'bg-rose-500' 
+                    : percentageUsed >= 80 
+                    ? 'bg-amber-500' 
+                    : 'bg-emerald-500'
+                }`}
+                style={{ width: isSoloPlan ? `${percentageUsed}%` : '100%' }}
+              />
+            </div>
+          </div>
+        </div>
+
         {/* Add / Import Section Grid */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
           
@@ -255,7 +361,8 @@ export default async function MembersPage() {
               <div className="sm:col-span-3 pt-1">
                 <button
                   type="submit"
-                  className="w-full sm:w-auto px-6 py-2.5 bg-emerald-600 hover:bg-emerald-500 font-bold text-xs text-white rounded-lg transition cursor-pointer"
+                  disabled={isSoloPlan && memberCount >= maxMembers}
+                  className="w-full sm:w-auto px-6 py-2.5 bg-emerald-600 hover:bg-emerald-500 disabled:bg-slate-800 disabled:text-slate-500 disabled:cursor-not-allowed font-bold text-xs text-white rounded-lg transition cursor-pointer"
                 >
                   + Add Member
                 </button>
@@ -268,7 +375,7 @@ export default async function MembersPage() {
             <div>
               <h2 className="text-base sm:text-lg font-semibold">Bulk Upload CSV</h2>
               <p className="text-xs text-slate-400 mt-0.5">
-                Upload a CSV containing columns for <code className="text-emerald-400">Name</code>, <code className="text-emerald-400">Email</code>, and <code className="text-emerald-400">Phone</code>. Existing emails will automatically update, while new entries are added.
+                Upload a CSV containing columns for <code className="text-emerald-400">Name</code>, <code className="text-emerald-400">Email</code>, and <code className="text-emerald-400">Phone</code>. Existing emails will update automatically.
               </p>
             </div>
 
@@ -282,7 +389,8 @@ export default async function MembersPage() {
               />
               <button
                 type="submit"
-                className="w-full py-2.5 bg-slate-800 hover:bg-slate-700 border border-slate-700 font-bold text-xs text-white rounded-lg transition cursor-pointer"
+                disabled={isSoloPlan && memberCount >= maxMembers}
+                className="w-full py-2.5 bg-slate-800 hover:bg-slate-700 disabled:bg-slate-800/50 disabled:text-slate-600 disabled:cursor-not-allowed border border-slate-700 font-bold text-xs text-white rounded-lg transition cursor-pointer"
               >
                 Upload Roster (.csv)
               </button>
@@ -294,7 +402,7 @@ export default async function MembersPage() {
         {/* Member Roster View & Edit */}
         <section className="bg-slate-900 border border-slate-800 rounded-xl p-4 sm:p-6">
           <div className="flex items-center justify-between mb-4">
-            <h2 className="text-base sm:text-lg font-semibold">Club Roster ({members?.length || 0})</h2>
+            <h2 className="text-base sm:text-lg font-semibold">Club Roster ({memberCount})</h2>
           </div>
 
           {members && members.length > 0 ? (

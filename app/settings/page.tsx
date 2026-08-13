@@ -4,20 +4,69 @@ import { redirect } from 'next/navigation'
 import { revalidatePath } from 'next/cache'
 import Link from 'next/link'
 
+// -----------------------------------------------------------------------------
+// Server Actions
+// -----------------------------------------------------------------------------
+
+async function signOutAction() {
+  'use server'
+  const supabase = await createClient()
+  await supabase.auth.signOut()
+  redirect('/login')
+}
+
+async function updateDefaultsAction(formData: FormData) {
+  'use server'
+  const supabase = await createClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) return
+
+  const default_duration = parseInt(formData.get('default_duration') as string) || 25
+  const start_time_increment = parseInt(formData.get('start_time_increment') as string) || 15
+  const timezone = (formData.get('timezone') as string) || 'America/New_York'
+
+  await supabase
+    .from('coaches')
+    .update({
+      default_lesson_duration: default_duration,
+      start_time_increment: start_time_increment,
+      timezone: timezone,
+    })
+    .eq('id', user.id)
+
+  revalidatePath('/settings')
+  revalidatePath('/dashboard')
+}
+
+async function inviteCoachAction(formData: FormData) {
+  'use server'
+  const supabase = await createClient()
+  const name = formData.get('coach_name') as string
+  const email = formData.get('coach_email') as string
+
+  if (!email || !name) return
+
+  const { error } = await supabase
+    .from('coaches')
+    .insert({ name, email, status: 'invited' })
+
+  if (error) {
+    console.error('Error inviting coach:', error)
+  }
+
+  revalidatePath('/settings')
+}
+
+// -----------------------------------------------------------------------------
+// Page Component
+// -----------------------------------------------------------------------------
+
 export default async function SettingsPage() {
   const supabase = await createClient()
 
   // 1. Check Auth State
   const { data: { user }, error } = await supabase.auth.getUser()
   if (error || !user) {
-    redirect('/login')
-  }
-
-  // SERVER ACTION: Sign Out
-  async function signOutAction() {
-    'use server'
-    const supabase = await createClient()
-    await supabase.auth.signOut()
     redirect('/login')
   }
 
@@ -34,49 +83,9 @@ export default async function SettingsPage() {
     .select('*')
     .order('name', { ascending: true })
 
-  // SERVER ACTION: Save Scheduling Defaults & Timezone
-  async function updateDefaultsAction(formData: FormData) {
-    'use server'
-    const supabase = await createClient()
-    const { data: { user } } = await supabase.auth.getUser()
-    if (!user) return
-
-    const default_duration = parseInt(formData.get('default_duration') as string) || 25
-    const start_time_increment = parseInt(formData.get('start_time_increment') as string) || 15
-    const timezone = (formData.get('timezone') as string) || 'America/New_York'
-
-    await supabase
-      .from('coaches')
-      .update({
-        default_lesson_duration: default_duration,
-        start_time_increment: start_time_increment,
-        timezone: timezone,
-      })
-      .eq('id', user.id)
-
-    revalidatePath('/settings')
-    revalidatePath('/dashboard')
-  }
-
-  // SERVER ACTION: Invite New Coach
-  async function inviteCoachAction(formData: FormData) {
-    'use server'
-    const supabase = await createClient()
-    const name = formData.get('coach_name') as string
-    const email = formData.get('coach_email') as string
-
-    if (!email || !name) return
-
-    const { error } = await supabase
-      .from('coaches')
-      .insert({ name, email, status: 'invited' })
-
-    if (error) {
-      console.error('Error inviting coach:', error)
-    }
-
-    revalidatePath('/settings')
-  }
+  const coachCount = allCoaches?.length || 1
+  const additionalCoachFee = Math.max(0, (coachCount - 1) * 29)
+  const totalMonthlyFee = 99 + additionalCoachFee
 
   return (
     <div className="min-h-screen bg-slate-950 text-white p-6 md:p-10">
@@ -137,10 +146,11 @@ export default async function SettingsPage() {
                   
                   {/* Duration Selector */}
                   <div>
-                    <label className="text-xs text-slate-400 font-medium block mb-1">
+                    <label htmlFor="default_duration" className="text-xs text-slate-400 font-medium block mb-1">
                       Lesson Duration
                     </label>
                     <select
+                      id="default_duration"
                       name="default_duration"
                       defaultValue={coach?.default_lesson_duration || 25}
                       className="w-full bg-slate-950 border border-slate-800 rounded-lg p-2.5 text-white focus:outline-none focus:border-emerald-500"
@@ -156,10 +166,11 @@ export default async function SettingsPage() {
 
                   {/* Start Increment Selector */}
                   <div>
-                    <label className="text-xs text-slate-400 font-medium block mb-1">
+                    <label htmlFor="start_time_increment" className="text-xs text-slate-400 font-medium block mb-1">
                       Time Increments
                     </label>
                     <select
+                      id="start_time_increment"
                       name="start_time_increment"
                       defaultValue={coach?.start_time_increment || 15}
                       className="w-full bg-slate-950 border border-slate-800 rounded-lg p-2.5 text-white focus:outline-none focus:border-emerald-500"
@@ -172,10 +183,11 @@ export default async function SettingsPage() {
 
                   {/* Timezone Selector */}
                   <div>
-                    <label className="text-xs text-slate-400 font-medium block mb-1">
+                    <label htmlFor="timezone" className="text-xs text-slate-400 font-medium block mb-1">
                       Club Timezone
                     </label>
                     <select
+                      id="timezone"
                       name="timezone"
                       defaultValue={coach?.timezone || 'America/New_York'}
                       className="w-full bg-slate-950 border border-slate-800 rounded-lg p-2.5 text-white focus:outline-none focus:border-emerald-500"
@@ -192,7 +204,7 @@ export default async function SettingsPage() {
                 <div className="flex justify-end pt-2">
                   <button
                     type="submit"
-                    className="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white font-semibold text-xs rounded-lg transition"
+                    className="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white font-semibold text-xs rounded-lg transition cursor-pointer"
                   >
                     Save Preferences
                   </button>
@@ -232,7 +244,7 @@ export default async function SettingsPage() {
                 <div className="flex justify-end">
                   <button
                     type="submit"
-                    className="px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white font-semibold text-xs rounded-lg transition"
+                    className="px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white font-semibold text-xs rounded-lg transition cursor-pointer"
                   >
                     Send Invitation
                   </button>
@@ -287,23 +299,23 @@ export default async function SettingsPage() {
                   <span className="font-semibold text-white">$99.00 / mo</span>
                 </div>
                 <div className="flex justify-between">
-                  <span className="text-slate-400">Active Coach Seats ({allCoaches?.length || 1})</span>
+                  <span className="text-slate-400">Active Coach Seats ({coachCount})</span>
                   <span className="font-semibold text-white">
-                    +${Math.max(0, ((allCoaches?.length || 1) - 1) * 29)}.00 / mo
+                    +${additionalCoachFee}.00 / mo
                   </span>
                 </div>
                 <div className="border-t border-slate-800 pt-2 flex justify-between font-bold text-sm">
                   <span className="text-slate-300">Total Monthly</span>
                   <span className="text-emerald-400">
-                    ${99 + Math.max(0, ((allCoaches?.length || 1) - 1) * 29)}.00 / mo
+                    ${totalMonthlyFee}.00 / mo
                   </span>
                 </div>
               </div>
 
               <div className="space-y-3">
-                <label className="text-xs font-semibold uppercase text-slate-400 tracking-wider">
+                <span className="text-xs font-semibold uppercase text-slate-400 tracking-wider block">
                   Available Tiers
-                </label>
+                </span>
                 <div className="grid grid-cols-1 gap-2 text-xs">
                   <div className="p-3 border border-slate-800 rounded-lg bg-slate-950 flex justify-between items-center">
                     <div>

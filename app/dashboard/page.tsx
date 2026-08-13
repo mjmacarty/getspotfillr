@@ -1,10 +1,11 @@
-// app/dashboard/page.tsx
 import { createClient } from '@/lib/supabase/server'
 import { redirect } from 'next/navigation'
 import { revalidatePath } from 'next/cache'
 import { sendBroadcastNotification } from '@/lib/notifications'
 import CancellationForm from '@/components/cancellation-form'
 import Link from 'next/link'
+
+export const dynamic = 'force-dynamic' // Force dynamic rendering to prevent stale page caches
 
 export default async function DashboardPage() {
   const supabase = await createClient()
@@ -23,31 +24,46 @@ export default async function DashboardPage() {
     redirect('/login')
   }
 
-  // 2. Fetch coach details
+  // 2. Fetch coach details INCLUDING club details (joined name)
   const { data: coach } = await supabase
     .from('coaches')
-    .select('id, name, default_lesson_duration, timezone')
+    .select(`
+      id, 
+      name, 
+      club_id, 
+      default_lesson_duration, 
+      timezone,
+      clubs!inner(name)
+    `)
     .eq('id', user.id)
     .single()
 
-  // 3. Fetch active members for dropdown
+  // Extract club name safely (handles join object)
+  const clubName = Array.isArray(coach?.clubs) 
+    ? coach?.clubs[0]?.name 
+    : coach?.clubs?.name
+
+  // 3. Fetch active members ONLY for this coach's club
   const { data: members } = await supabase
     .from('members')
     .select('id, name, email, phone')
+    .eq('club_id', coach?.club_id)
     .order('name', { ascending: true })
 
   // 4. Calculate today's date in coach's preferred timezone
   const userTimezone = coach?.timezone || 'America/New_York'
   const today = new Date().toLocaleDateString('en-CA', { timeZone: userTimezone })
 
-  // 5. Fetch all canceled slots
+  // 5. Fetch canceled slots ONLY for coaches in this specific club
   const { data: allSlots } = await supabase
     .from('canceled_lessons')
     .select(`
       *,
       canceling_member:members!canceling_member_id(name),
-      claimed_member:members!claimed_by_member_id(name)
+      claimed_member:members!claimed_by_member_id(name),
+      coaches!inner(club_id)
     `)
+    .eq('coaches.club_id', coach?.club_id)
     .order('lesson_date', { ascending: true })
     .order('start_time', { ascending: true })
 
@@ -58,6 +74,13 @@ export default async function DashboardPage() {
     const { data: { user } } = await supabase.auth.getUser()
 
     if (!user) return
+
+    // Get coach profile inside action to ensure correct club scoping
+    const { data: activeCoach } = await supabase
+      .from('coaches')
+      .select('club_id')
+      .eq('id', user.id)
+      .single()
 
     const canceling_member_id = formData.get('canceling_member_id') as string
     const lesson_date = formData.get('lesson_date') as string
@@ -82,13 +105,15 @@ export default async function DashboardPage() {
       return
     }
 
-    const { data: allMembers } = await supabase
+    // Broadcast ONLY to members of THIS club
+    const { data: clubMembers } = await supabase
       .from('members')
       .select('id, email, phone')
+      .eq('club_id', activeCoach?.club_id)
 
-    if (allMembers && allMembers.length > 0) {
+    if (clubMembers && clubMembers.length > 0) {
       await Promise.all(
-        allMembers.map((m) =>
+        clubMembers.map((m) =>
           sendBroadcastNotification({
             recipient: { id: m.id, email: m.email, phone: m.phone },
             slotId: newSlot.id,
@@ -127,10 +152,17 @@ export default async function DashboardPage() {
         <header className="pb-4 border-b border-slate-800 space-y-4">
           <div className="flex items-center justify-between gap-4">
             <div>
-              <Link href="/dashboard" className="text-xl sm:text-2xl font-bold tracking-tight hover:text-slate-200 transition">
-                SpotFillr
-              </Link>
-              <p className="text-xs sm:text-sm text-slate-400 mt-0.5">
+              <div className="flex items-center gap-3">
+                <Link href="/dashboard" className="text-xl sm:text-2xl font-bold tracking-tight hover:text-slate-200 transition">
+                  SpotFillr
+                </Link>
+                {clubName && (
+                  <span className="px-2.5 py-0.5 text-xs font-medium bg-slate-800 text-slate-300 border border-slate-700 rounded-full">
+                    {clubName}
+                  </span>
+                )}
+              </div>
+              <p className="text-xs sm:text-sm text-slate-400 mt-1">
                 Logged in as <span className="text-slate-200 font-medium">{coach?.name || user.email}</span>
               </p>
             </div>

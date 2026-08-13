@@ -6,26 +6,32 @@ export default function LandingPage() {
     <div className="min-h-screen bg-slate-950 text-white flex flex-col justify-between p-4 sm:p-6 md:p-10">
       
       {/* Header / Nav */}
-      <header className="max-w-6xl w-full mx-auto pb-4 border-b border-slate-800">
-        <div className="flex items-center justify-between gap-4">
-          <Link href="/" className="hover:opacity-90 transition">
-            <div className="text-xl font-bold tracking-tight text-white">
-              Spot<span className="text-blue-500">Fillr</span>
-            </div>
-          </Link>
+<header className="max-w-6xl w-full mx-auto pb-4 border-b border-slate-800">
+  <div className="flex items-center justify-between gap-4">
+    <Link href="/" className="hover:opacity-90 transition">
+      <div className="text-xl font-bold tracking-tight text-white">
+        Spot<span className="text-blue-500">Fillr</span>
+      </div>
+    </Link>
 
-          <nav className="flex items-center gap-4 sm:gap-6 text-xs sm:text-sm font-medium">
-            <a href="#features" className="text-slate-400 hover:text-white transition">Features</a>
-            <a href="#pricing" className="text-slate-400 hover:text-white transition">Pricing</a>
-            <Link 
-              href="/login" 
-              className="px-3 py-1.5 sm:px-4 sm:py-2 text-xs font-semibold bg-slate-900 hover:bg-slate-800 border border-slate-800 rounded-lg text-slate-300 transition"
-            >
-              Sign In
-            </Link>
-          </nav>
-        </div>
-      </header>
+    <nav className="flex items-center gap-3 sm:gap-4 text-xs sm:text-sm font-medium">
+      <a href="#features" className="text-slate-400 hover:text-white transition">Features</a>
+      <a href="#pricing" className="text-slate-400 hover:text-white transition">Pricing</a>
+      <Link 
+        href="/login" 
+        className="px-3 py-1.5 sm:px-4 sm:py-2 text-xs font-semibold bg-slate-900 hover:bg-slate-800 border border-slate-800 rounded-lg text-slate-300 transition"
+      >
+        Sign In
+      </Link>
+      <Link 
+        href="/register?plan=solo" 
+        className="px-3 py-1.5 sm:px-4 sm:py-2 text-xs font-semibold bg-blue-600 hover:bg-blue-500 rounded-lg text-white transition shadow-sm"
+      >
+        Sign Up
+      </Link>
+    </nav>
+  </div>
+</header>
 
       {/* Hero Section */}
       <main className="flex-1 flex flex-col items-center justify-center text-center px-4 max-w-5xl mx-auto py-16 sm:py-20 space-y-20">
@@ -65,7 +71,6 @@ export default function LandingPage() {
             </p>
           </div>
 
-          {/* How It Works - 3 Step Flow */}
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
             <div className="bg-slate-900/80 border border-slate-800/80 rounded-xl p-6 space-y-3">
               <span className="text-xs font-bold text-blue-400 uppercase tracking-wider block">Step 01</span>
@@ -92,7 +97,6 @@ export default function LandingPage() {
             </div>
           </div>
 
-          {/* Capabilities Grid */}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-4">
             <div className="bg-slate-900 border border-slate-800/60 rounded-xl p-5 space-y-2">
               <h4 className="font-semibold text-sm text-white">Frictionless Parent Claiming</h4>
@@ -134,8 +138,6 @@ export default function LandingPage() {
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6 max-w-4xl mx-auto">
-            
-            {/* Solo Plan */}
             <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6 flex flex-col justify-between space-y-6">
               <div className="space-y-4">
                 <div>
@@ -169,7 +171,6 @@ export default function LandingPage() {
               </Link>
             </div>
 
-            {/* Club Plan */}
             <div className="bg-slate-900 border-2 border-blue-500 rounded-2xl p-6 flex flex-col justify-between space-y-6 relative shadow-xl shadow-blue-950/30">
               <span className="absolute -top-3 left-1/2 -translate-x-1/2 bg-blue-600 text-white text-[10px] font-extrabold uppercase px-3 py-0.5 rounded-full tracking-wider">
                 Most Popular
@@ -205,7 +206,6 @@ export default function LandingPage() {
                 Start 14-Day Free Trial
               </Link>
             </div>
-
           </div>
         </section>
 

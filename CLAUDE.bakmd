@@ -1,0 +1,17 @@
+@AGENTS.md
+# SpotFillr - Authentication & Architecture Context
+* note turn email confirmation back on
+
+## App Routing Setup (Next.js App Router)
+- `app/page.tsx` -> Landing splash page with plan CTA links (`/register?plan=solo` or `/register?plan=club`).
+- `app/login/page.tsx` -> Server Action sign-in form with Supabase auth. Includes a link to `/register`.
+- `app/register/page.tsx` -> Registration form supporting plan selection (`solo` or `club`) via query params (`?plan=...`) and interactive toggle cards. Passes `full_name`, `club_name`, and `plan` in Supabase `options.data`.
+- `app/auth/callback/route.ts` -> Handles Supabase Auth redirect tokens. (Do not create a `register` subfolder inside `auth/callback`).
+
+## Supabase Settings
+- Email Confirmation: Disabled in Supabase Dashboard (**Authentication -> Sign In / Providers -> Email -> Confirm email: OFF**).
+
+## Tech Stack & Style
+- Next.js (App Router, Server Actions)
+- Tailwind CSS (Dark slate theme: `bg-slate-950`, `bg-slate-900`, `text-white`, `text-blue-500`)
+- Supabase SSR Auth 
