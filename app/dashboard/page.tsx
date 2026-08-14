@@ -39,9 +39,10 @@ export default async function DashboardPage() {
     .single()
 
   // Extract club name safely (handles join object)
-  const clubName = Array.isArray(coach?.clubs) 
-    ? coach?.clubs[0]?.name 
-    : coach?.clubs?.name
+  const clubsData = coach?.clubs as any;
+  const clubName = Array.isArray(clubsData)
+  ? clubsData[0]?.name
+  : clubsData?.name;
 
   // 3. Fetch active members ONLY for this coach's club
   const { data: members } = await supabase
