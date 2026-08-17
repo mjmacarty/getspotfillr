@@ -209,6 +209,61 @@ export default function LandingPage() {
           </div>
         </section>
 
+        {/* FAQ Section */}
+        <section id="faq" className="w-full space-y-8 pt-12 border-t border-slate-900 text-left">
+          <div className="text-center space-y-2">
+            <h2 className="text-2xl sm:text-3xl font-bold tracking-tight">Frequently asked questions</h2>
+          </div>
+
+          <div className="max-w-2xl mx-auto space-y-3">
+            <details className="group bg-slate-900 border border-slate-800/80 rounded-xl px-5 py-4">
+              <summary className="flex items-center justify-between cursor-pointer list-none font-semibold text-sm text-white">
+                How does this work?
+                <span className="text-slate-500 group-open:rotate-180 transition-transform">▾</span>
+              </summary>
+              <p className="text-xs sm:text-sm text-slate-400 leading-relaxed mt-3">
+                When a member cancels a private lesson, you report the opening from your dashboard in seconds.
+                SpotFillr instantly notifies your roster by email and SMS with a personalized claim link.
+                The first member to tap it locks the slot automatically&mdash;first come, first served&mdash;so
+                you recover the lost lesson without a single phone call.
+              </p>
+            </details>
+
+            <details className="group bg-slate-900 border border-slate-800/80 rounded-xl px-5 py-4">
+              <summary className="flex items-center justify-between cursor-pointer list-none font-semibold text-sm text-white">
+                Is my data secure?
+                <span className="text-slate-500 group-open:rotate-180 transition-transform">▾</span>
+              </summary>
+              <p className="text-xs sm:text-sm text-slate-400 leading-relaxed mt-3">
+                Yes. Your data is encrypted and stored securely, both in transit and at rest.
+              </p>
+            </details>
+
+            <details className="group bg-slate-900 border border-slate-800/80 rounded-xl px-5 py-4">
+              <summary className="flex items-center justify-between cursor-pointer list-none font-semibold text-sm text-white">
+                What will you do with member data?
+                <span className="text-slate-500 group-open:rotate-180 transition-transform">▾</span>
+              </summary>
+              <p className="text-xs sm:text-sm text-slate-400 leading-relaxed mt-3">
+                Nothing. Your data is yours. We will never contact your members directly or sell your
+                member lists to anyone&mdash;ever.
+              </p>
+            </details>
+
+            <details className="group bg-slate-900 border border-slate-800/80 rounded-xl px-5 py-4">
+              <summary className="flex items-center justify-between cursor-pointer list-none font-semibold text-sm text-white">
+                Is there a contract?
+                <span className="text-slate-500 group-open:rotate-180 transition-transform">▾</span>
+              </summary>
+              <p className="text-xs sm:text-sm text-slate-400 leading-relaxed mt-3">
+                No. This service runs month-to-month. Simply cancel anytime from your settings page and
+                your service will automatically stop at the end of the current month&mdash;you won&apos;t
+                be billed again.
+              </p>
+            </details>
+          </div>
+        </section>
+
       </main>
 
       {/* Footer Branding */}
