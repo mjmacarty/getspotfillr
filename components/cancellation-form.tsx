@@ -15,7 +15,6 @@ type BroadcastState = {
   message?: string
 }
 
-
 interface CancellationFormProps {
   members: Member[] | null
   postCancellationAction: (prevState: BroadcastState, formData: FormData) => Promise<BroadcastState>
@@ -104,6 +103,15 @@ export default function CancellationForm({
       setEndTime(getEndTime(freshStart, defaultLessonDurationMinutes))
     }
   }, [state, defaultLessonDurationMinutes])
+
+  // Auto-dismiss the confirmation/error message after 10 seconds.
+  const [showResult, setShowResult] = useState(false)
+  useEffect(() => {
+    if (state.status === 'idle') return
+    setShowResult(true)
+    const timer = setTimeout(() => setShowResult(false), 10000)
+    return () => clearTimeout(timer)
+  }, [state])
 
   return (
     <form
@@ -223,14 +231,14 @@ export default function CancellationForm({
       </div>
 
       <div className="sm:col-span-2 lg:col-span-4 flex items-center justify-end gap-4 pt-2">
-        {state.status === 'success' && (
+        {showResult && state.status === 'success' && (
           <p className="text-xs text-emerald-400 font-medium">
             {state.count && state.count > 0
               ? `✓ Broadcast sent to ${state.count} member${state.count === 1 ? '' : 's'}`
               : state.message}
           </p>
         )}
-        {state.status === 'error' && (
+        {showResult && state.status === 'error' && (
           <p className="text-xs text-rose-400 font-medium">{state.message}</p>
         )}
         <button
