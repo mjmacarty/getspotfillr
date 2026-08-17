@@ -75,7 +75,7 @@ export default async function RegisterPage({
     <div className="min-h-screen bg-slate-950 text-white flex flex-col justify-between p-4 sm:p-6 md:p-10">
       <header className="max-w-6xl w-full mx-auto pb-4 border-b border-slate-800 flex justify-between items-center">
         <Link href="/" className="hover:opacity-90 transition">
-          <div className="text-xl font-bold tracking-tight text-white">
+          <div className="text-2xl sm:text-3xl font-bold tracking-tight text-white">
             Spot<span className="text-blue-500">Fillr</span>
           </div>
         </Link>
