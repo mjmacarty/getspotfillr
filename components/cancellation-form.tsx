@@ -15,6 +15,7 @@ type BroadcastState = {
   message?: string
 }
 
+
 interface CancellationFormProps {
   members: Member[] | null
   postCancellationAction: (prevState: BroadcastState, formData: FormData) => Promise<BroadcastState>
