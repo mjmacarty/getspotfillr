@@ -152,6 +152,38 @@ export default async function DashboardPage() {
     (s) => s.lesson_date < today && s.status === 'open'
   ).length || 0
 
+  // Reporting: fill rate & frequent cancellations, both over a rolling 30-day
+  // window keyed on lesson_date (no extra queries — reuses allSlots).
+  const windowStart = new Date()
+  windowStart.setDate(windowStart.getDate() - 30)
+  const windowStartStr = windowStart.toLocaleDateString('en-CA', { timeZone: userTimezone })
+  const slotsInWindow = allSlots?.filter((s) => s.lesson_date >= windowStartStr) || []
+
+  // Fill rate only counts *resolved* outcomes (claimed, or open-but-passed =
+  // expired) — a slot that's still open and not yet due shouldn't count
+  // against the rate just because it hasn't been claimed yet.
+  const filledInWindow = slotsInWindow.filter((s) => s.status === 'claimed').length
+  const expiredInWindow = slotsInWindow.filter((s) => s.status === 'open' && s.lesson_date < today).length
+  const resolvedInWindow = filledInWindow + expiredInWindow
+  const fillRate = resolvedInWindow > 0 ? Math.round((filledInWindow / resolvedInWindow) * 100) : null
+
+  // Members with 3+ cancellations in the window
+  const cancellationCounts = new Map<string, { name: string; count: number; mostRecent: string }>()
+  slotsInWindow.forEach((s) => {
+    if (!s.canceling_member_id) return
+    const name = s.canceling_member?.name || 'Unknown'
+    const existing = cancellationCounts.get(s.canceling_member_id)
+    if (existing) {
+      existing.count += 1
+      if (s.lesson_date > existing.mostRecent) existing.mostRecent = s.lesson_date
+    } else {
+      cancellationCounts.set(s.canceling_member_id, { name, count: 1, mostRecent: s.lesson_date })
+    }
+  })
+  const frequentCancellers = Array.from(cancellationCounts.values())
+    .filter((m) => m.count >= 3)
+    .sort((a, b) => b.count - a.count)
+
   return (
     <div className="min-h-screen bg-slate-950 text-white p-4 sm:p-6 md:p-10">
       <div className="max-w-6xl mx-auto space-y-6 md:space-y-8">
@@ -224,7 +256,7 @@ export default async function DashboardPage() {
         </header>
 
         {/* Metrics Row */}
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 sm:gap-4">
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3 sm:gap-4">
           <div className="bg-slate-900 border border-slate-800 rounded-xl p-3 sm:p-5">
             <span className="text-[10px] sm:text-xs font-semibold uppercase text-slate-400 tracking-wider">Open Slots</span>
             <p className="text-2xl sm:text-3xl font-bold text-amber-400 mt-1 sm:mt-2">{openCount}</p>
@@ -241,6 +273,14 @@ export default async function DashboardPage() {
             <span className="text-[10px] sm:text-xs font-semibold uppercase text-slate-400 tracking-wider">Total Active</span>
             <p className="text-2xl sm:text-3xl font-bold text-blue-400 mt-1 sm:mt-2">{upcomingSlots.length}</p>
           </div>
+          <div className="bg-slate-900 border border-emerald-800/40 rounded-xl p-3 sm:p-5">
+            <span className="text-[10px] sm:text-xs font-semibold uppercase text-slate-400 tracking-wider">
+              Fill Rate <span className="text-slate-600 normal-case">· 30d</span>
+            </span>
+            <p className="text-2xl sm:text-3xl font-bold text-emerald-400 mt-1 sm:mt-2">
+              {fillRate === null ? '—' : `${fillRate}%`}
+            </p>
+          </div>
         </div>
 
         {/* Form: Post Canceled Slot */}
@@ -256,6 +296,34 @@ export default async function DashboardPage() {
             defaultLessonDurationMinutes={coach?.default_lesson_duration || 25}
           />
         </section>
+
+        {/* Frequent Cancellations — only shown when someone actually crosses the threshold */}
+        {frequentCancellers.length > 0 && (
+          <section className="bg-slate-900 border border-slate-800 rounded-xl p-4 sm:p-6">
+            <div className="flex items-baseline justify-between mb-1">
+              <h2 className="text-base sm:text-lg font-semibold">Frequent Cancellations</h2>
+              <span className="text-[11px] text-slate-500">last 30 days</span>
+            </div>
+            <p className="text-xs text-slate-400 mb-4">Members who canceled 3 or more lessons.</p>
+
+            <div className="flex flex-col gap-2">
+              {frequentCancellers.map((m) => (
+                <div
+                  key={m.name}
+                  className="flex items-center justify-between bg-slate-950 border border-slate-800 rounded-lg px-3.5 py-2.5"
+                >
+                  <div>
+                    <div className="text-sm font-medium text-white">{m.name}</div>
+                    <div className="text-[11px] text-slate-500">most recent: {m.mostRecent}</div>
+                  </div>
+                  <span className="text-[11px] font-semibold text-amber-400 bg-amber-950/40 border border-amber-800/50 rounded-full px-2.5 py-1">
+                    {m.count} cancellations
+                  </span>
+                </div>
+              ))}
+            </div>
+          </section>
+        )}
 
         {/* Activity Feed Section */}
         <section className="bg-slate-900 border border-slate-800 rounded-xl p-4 sm:p-6">
