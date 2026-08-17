@@ -1,14 +1,16 @@
 // app/claim/[id]/page.tsx
 import { createClient } from '@/lib/supabase/server'
 import { revalidatePath } from 'next/cache'
-import Link from 'next/link'
+import { redirect } from 'next/navigation'
 
 interface ClaimPageProps {
   params: Promise<{ id: string }>
+  searchParams: Promise<{ memberId?: string }>
 }
 
-export default async function ClaimSlotPage({ params }: ClaimPageProps) {
+export default async function ClaimSlotPage({ params, searchParams }: ClaimPageProps) {
   const { id: slotId } = await params
+  const { memberId } = await searchParams
   const supabase = await createClient()
 
   // 1. Fetch slot details with coach & original canceling member
@@ -22,11 +24,22 @@ export default async function ClaimSlotPage({ params }: ClaimPageProps) {
     .eq('id', slotId)
     .single()
 
-  // 2. Fetch member list so the claiming parent/fencer can select their name
-  const { data: members } = await supabase
-    .from('members')
-    .select('id, name')
-    .order('name', { ascending: true })
+  // 2. If the link identifies a member (personalized notification link), look
+  // them up so we can skip the dropdown entirely. Only fall back to fetching
+  // the full member list if we don't know who's clicking.
+  let linkedMember: { id: string; name: string } | null = null
+  if (memberId) {
+    const { data } = await supabase
+      .from('members')
+      .select('id, name')
+      .eq('id', memberId)
+      .single()
+    linkedMember = data
+  }
+
+  const { data: members } = linkedMember
+    ? { data: null }
+    : await supabase.from('members').select('id, name').order('name', { ascending: true })
 
   // SERVER ACTION: Claim the slot
   async function claimSlotAction(formData: FormData) {
@@ -51,8 +64,10 @@ export default async function ClaimSlotPage({ params }: ClaimPageProps) {
       console.error('Error claiming slot:', error)
     }
 
-    revalidatePath(`/claim/${slotId}`)
     revalidatePath('/dashboard')
+    // Redirect (not just revalidate) so the page re-fetches fresh data and
+    // can tell "you just claimed this" apart from "someone beat you to it".
+    redirect(`/claim/${slotId}?memberId=${claimingMemberId}`)
   }
 
   if (!slot) {
@@ -66,7 +81,9 @@ export default async function ClaimSlotPage({ params }: ClaimPageProps) {
     )
   }
 
-  const isAlreadyClaimed = slot.status === 'claimed'
+  const isClaimed = slot.status === 'claimed'
+  const isClaimedByMe = isClaimed && !!memberId && slot.claimed_by_member_id === memberId
+  const isClaimedByOther = isClaimed && !isClaimedByMe
 
   return (
     <div className="min-h-screen bg-slate-950 text-white flex items-center justify-center p-4 md:p-8">
@@ -98,30 +115,46 @@ export default async function ClaimSlotPage({ params }: ClaimPageProps) {
         </div>
 
         {/* Status / Claim Form */}
-        {isAlreadyClaimed ? (
+        {isClaimedByMe ? (
+          <div className="bg-emerald-950/40 border border-emerald-800/80 rounded-xl p-4 text-center space-y-1">
+            <p className="text-emerald-400 font-bold text-sm">
+              You&apos;re confirmed{linkedMember ? `, ${linkedMember.name}` : ''}!
+            </p>
+            <p className="text-xs text-slate-400">This lesson slot is booked for you.</p>
+          </div>
+        ) : isClaimedByOther ? (
           <div className="bg-amber-950/40 border border-amber-800/80 rounded-xl p-4 text-center space-y-1">
             <p className="text-amber-400 font-bold text-sm">Slot Already Claimed!</p>
             <p className="text-xs text-slate-400">Another member grabbed this lesson slot first.</p>
           </div>
         ) : (
           <form action={claimSlotAction} className="space-y-4">
-            <div>
-              <label className="block text-xs font-medium text-slate-300 mb-1.5">
-                Select Your Name / Fencer Name
-              </label>
-              <select
-                name="claiming_member_id"
-                required
-                className="w-full bg-slate-950 border border-slate-800 rounded-lg p-3 text-sm text-white focus:outline-none focus:border-emerald-500"
-              >
-                <option value="">-- Choose Member --</option>
-                {members?.map((m) => (
-                  <option key={m.id} value={m.id}>
-                    {m.name}
-                  </option>
-                ))}
-              </select>
-            </div>
+            {linkedMember ? (
+              <>
+                <p className="text-sm text-slate-300 text-center">
+                  Claiming for <span className="font-semibold text-white">{linkedMember.name}</span>
+                </p>
+                <input type="hidden" name="claiming_member_id" value={linkedMember.id} />
+              </>
+            ) : (
+              <div>
+                <label className="block text-xs font-medium text-slate-300 mb-1.5">
+                  Select Your Name / Fencer Name
+                </label>
+                <select
+                  name="claiming_member_id"
+                  required
+                  className="w-full bg-slate-950 border border-slate-800 rounded-lg p-3 text-sm text-white focus:outline-none focus:border-emerald-500"
+                >
+                  <option value="">-- Choose Member --</option>
+                  {members?.map((m) => (
+                    <option key={m.id} value={m.id}>
+                      {m.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )}
 
             <button
               type="submit"
