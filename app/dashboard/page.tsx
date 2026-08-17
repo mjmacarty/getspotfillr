@@ -193,7 +193,7 @@ export default async function DashboardPage() {
           <div className="flex items-center justify-between gap-4">
             <div>
               <div className="flex items-center gap-3">
-                <Link href="/dashboard" className="text-xl sm:text-2xl font-bold tracking-tight hover:text-slate-200 transition">
+                <Link href="/dashboard" className="text-2xl sm:text-3xl font-bold tracking-tight hover:text-slate-200 transition">
                   SpotFillr
                 </Link>
                 {clubName && (
