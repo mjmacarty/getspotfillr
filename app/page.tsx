@@ -16,6 +16,7 @@ export default function LandingPage() {
 
     <nav className="flex items-center gap-3 sm:gap-4 text-xs sm:text-sm font-medium">
       <a href="#features" className="text-slate-400 hover:text-white transition">Features</a>
+      <a href="#faq" className="text-slate-400 hover:text-white transition">FAQ</a>
       <a href="#pricing" className="text-slate-400 hover:text-white transition">Pricing</a>
       <Link 
         href="/login" 
@@ -215,7 +216,7 @@ export default function LandingPage() {
             <h2 className="text-2xl sm:text-3xl font-bold tracking-tight">Frequently asked questions</h2>
           </div>
 
-          <div className="max-w-2xl mx-auto space-y-3">
+          <div id="faq" className="max-w-2xl mx-auto space-y-3">
             <details className="group bg-slate-900 border border-slate-800/80 rounded-xl px-5 py-4">
               <summary className="flex items-center justify-between cursor-pointer list-none font-semibold text-sm text-white">
                 How does this work?
