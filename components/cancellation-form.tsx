@@ -1,7 +1,7 @@
 // components/cancellation-form.tsx
 'use client'
 
-import { useState, useRef } from 'react'
+import { useActionState, useEffect, useRef, useState } from 'react'
 
 interface Member {
   id: string
@@ -9,9 +9,15 @@ interface Member {
   email: string
 }
 
+type BroadcastState = {
+  status: 'idle' | 'success' | 'error'
+  count?: number
+  message?: string
+}
+
 interface CancellationFormProps {
   members: Member[] | null
-  postCancellationAction: (formData: FormData) => Promise<void>
+  postCancellationAction: (prevState: BroadcastState, formData: FormData) => Promise<BroadcastState>
   defaultLessonDurationMinutes?: number
 }
 
@@ -33,6 +39,39 @@ const TIME_OPTIONS = [
   '21:00', '21:15', '21:30'
 ]
 
+// Today's date in the browser's local time zone (avoids the UTC/local
+// mismatch you get from `new Date().toISOString()` near midnight).
+function getLocalToday(): string {
+  const d = new Date()
+  const y = d.getFullYear()
+  const m = String(d.getMonth() + 1).padStart(2, '0')
+  const day = String(d.getDate()).padStart(2, '0')
+  return `${y}-${m}-${day}`
+}
+
+// Nearest half hour in the future, clamped to the dropdown's 07:00–21:30 range.
+function getDefaultStartTime(): string {
+  const now = new Date()
+  let hours = now.getHours()
+  const mins = now.getMinutes()
+  const roundedMinutes = mins === 0 ? 0 : mins <= 30 ? 30 : 0
+  if (mins > 30) hours += 1
+
+  const candidate = `${String(hours).padStart(2, '0')}:${String(roundedMinutes).padStart(2, '0')}`
+  if (candidate < TIME_OPTIONS[0]) return TIME_OPTIONS[0]
+  if (candidate > TIME_OPTIONS[TIME_OPTIONS.length - 1]) return TIME_OPTIONS[TIME_OPTIONS.length - 1]
+  return candidate
+}
+
+function getEndTime(startTime: string, durationMinutes: number): string {
+  const [hours, minutes] = startTime.split(':').map(Number)
+  const date = new Date()
+  date.setHours(hours, minutes + durationMinutes, 0)
+  return `${String(date.getHours()).padStart(2, '0')}:${String(date.getMinutes()).padStart(2, '0')}`
+}
+
+const initialState: BroadcastState = { status: 'idle' }
+
 export default function CancellationForm({
   members,
   postCancellationAction,
@@ -40,47 +79,35 @@ export default function CancellationForm({
 }: CancellationFormProps) {
   const formRef = useRef<HTMLFormElement>(null)
   const dateInputRef = useRef<HTMLInputElement>(null)
-  
-  const today = new Date().toISOString().split('T')[0]
-  
-  const [startTime, setStartTime] = useState('16:00')
-  const [endTime, setEndTime] = useState('16:25')
-  const [isSubmitting, setIsSubmitting] = useState(false)
+
+  const [today, setToday] = useState(getLocalToday)
+  const [startTime, setStartTime] = useState(getDefaultStartTime)
+  const [endTime, setEndTime] = useState(() => getEndTime(getDefaultStartTime(), defaultLessonDurationMinutes))
+  const [state, formAction, isPending] = useActionState(postCancellationAction, initialState)
 
   const handleStartTimeChange = (newStartTime: string) => {
     setStartTime(newStartTime)
-
     if (!newStartTime || !newStartTime.includes(':')) return
-
-    const [hours, minutes] = newStartTime.split(':').map(Number)
-    if (isNaN(hours) || isNaN(minutes)) return
-
-    const date = new Date()
-    date.setHours(hours, minutes + defaultLessonDurationMinutes, 0)
-
-    const endH = String(date.getHours()).padStart(2, '0')
-    const endM = String(date.getMinutes()).padStart(2, '0')
-    setEndTime(`${endH}:${endM}`)
+    setEndTime(getEndTime(newStartTime, defaultLessonDurationMinutes))
   }
 
-  const handleSubmit = async (formData: FormData) => {
-    setIsSubmitting(true)
-    try {
-      await postCancellationAction(formData)
+  // After a successful broadcast, reset the form and roll the date/time
+  // defaults forward again rather than leaving stale values behind.
+  useEffect(() => {
+    if (state.status === 'success') {
       formRef.current?.reset()
-      setStartTime('16:00')
-      setEndTime('16:25')
-    } catch (err) {
-      console.error('Error posting slot:', err)
-    } finally {
-      setIsSubmitting(false)
+      const freshToday = getLocalToday()
+      const freshStart = getDefaultStartTime()
+      setToday(freshToday)
+      setStartTime(freshStart)
+      setEndTime(getEndTime(freshStart, defaultLessonDurationMinutes))
     }
-  }
+  }, [state, defaultLessonDurationMinutes])
 
   return (
-    <form 
-      ref={formRef} 
-      action={handleSubmit} 
+    <form
+      ref={formRef}
+      action={formAction}
       className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4"
     >
       {/* Member Selection */}
@@ -119,6 +146,7 @@ export default function CancellationForm({
           name="lesson_date"
           type="date"
           defaultValue={today}
+          key={today}
           onClick={() => {
             try {
               dateInputRef.current?.showPicker()
@@ -193,13 +221,23 @@ export default function CancellationForm({
         </div>
       </div>
 
-      <div className="sm:col-span-2 lg:col-span-4 flex justify-end pt-2">
+      <div className="sm:col-span-2 lg:col-span-4 flex items-center justify-end gap-4 pt-2">
+        {state.status === 'success' && (
+          <p className="text-xs text-emerald-400 font-medium">
+            {state.count && state.count > 0
+              ? `✓ Broadcast sent to ${state.count} member${state.count === 1 ? '' : 's'}`
+              : state.message}
+          </p>
+        )}
+        {state.status === 'error' && (
+          <p className="text-xs text-rose-400 font-medium">{state.message}</p>
+        )}
         <button
           type="submit"
-          disabled={isSubmitting}
+          disabled={isPending}
           className="bg-blue-600 hover:bg-blue-500 disabled:bg-slate-700 font-semibold text-sm text-white px-6 py-2.5 rounded-lg transition"
         >
-          {isSubmitting ? 'Posting Slot...' : 'Broadcast Open Slot'}
+          {isPending ? 'Notifying...' : 'Notify Members Now'}
         </button>
       </div>
     </form>
