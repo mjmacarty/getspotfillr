@@ -69,12 +69,15 @@ export default async function DashboardPage() {
     .order('start_time', { ascending: true })
 
   // SERVER ACTION: Report cancellation & trigger broadcast
-  async function postCancellation(formData: FormData) {
+  async function postCancellation(
+    _prevState: { status: 'idle' | 'success' | 'error'; count?: number; message?: string },
+    formData: FormData
+  ) {
     'use server'
     const supabase = await createClient()
     const { data: { user } } = await supabase.auth.getUser()
 
-    if (!user) return
+    if (!user) return { status: 'error' as const, message: 'You must be signed in.' }
 
     // Get coach profile inside action to ensure correct club scoping
     const { data: activeCoach } = await supabase
@@ -103,7 +106,7 @@ export default async function DashboardPage() {
 
     if (insertError || !newSlot) {
       console.error('Error creating slot:', insertError)
-      return
+      return { status: 'error' as const, message: 'Could not save the cancellation. Please try again.' }
     }
 
     // Broadcast ONLY to members of THIS club
@@ -132,9 +135,13 @@ export default async function DashboardPage() {
           broadcast_sent_at: new Date().toISOString(),
         })
         .eq('id', newSlot.id)
+
+      revalidatePath('/dashboard')
+      return { status: 'success' as const, count: clubMembers.length }
     }
 
     revalidatePath('/dashboard')
+    return { status: 'success' as const, count: 0, message: 'Slot saved, but there are no active members to notify.' }
   }
 
   // Metric Calculations
@@ -155,9 +162,7 @@ export default async function DashboardPage() {
             <div>
               <div className="flex items-center gap-3">
                 <Link href="/dashboard" className="text-xl sm:text-2xl font-bold tracking-tight hover:text-slate-200 transition">
-                  <div className="text-xl font-bold tracking-tight text-white">
-                  Spot<span className="text-blue-500">Fillr</span>
-                  </div>
+                  SpotFillr
                 </Link>
                 {clubName && (
                   <span className="px-2.5 py-0.5 text-xs font-medium bg-slate-800 text-slate-300 border border-slate-700 rounded-full">
