@@ -29,7 +29,7 @@ export async function sendBroadcastNotification({
   if (recipient.email) {
     try {
       const { data, error } = await resend.emails.send({
-        from: 'SpotFillr <onboarding@resend.dev>',
+        from: 'SpotFillr <alerts@getspotfillr.com>',
         to: recipient.email,
         subject: `Open Lesson Spot Available: ${lessonDate}`,
         html: `
