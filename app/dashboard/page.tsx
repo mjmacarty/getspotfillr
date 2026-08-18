@@ -194,7 +194,8 @@ export default async function DashboardPage() {
             <div>
               <div className="flex items-center gap-3">
                 <Link href="/dashboard" className="text-2xl sm:text-3xl font-bold tracking-tight hover:text-slate-200 transition">
-                  SpotFillr
+                  Spot<span className="text-blue-500">Fillr</span>
+
                 </Link>
                 {clubName && (
                   <span className="px-2.5 py-0.5 text-xs font-medium bg-slate-800 text-slate-300 border border-slate-700 rounded-full">

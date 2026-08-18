@@ -9,7 +9,7 @@ export default function LandingPage() {
 <header className="max-w-6xl w-full mx-auto pb-4 border-b border-slate-800">
   <div className="flex items-center justify-between gap-4">
     <Link href="/" className="hover:opacity-90 transition">
-      <div className="text-2xl font-bold tracking-tight text-white">
+      <div className="text-2xl sm: text-3xl font-bold tracking-tight text-white">
         Spot<span className="text-blue-500">Fillr</span>
       </div>
     </Link>
