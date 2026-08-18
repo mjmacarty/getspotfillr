@@ -9,7 +9,7 @@ export default function LandingPage() {
 <header className="max-w-6xl w-full mx-auto pb-4 border-b border-slate-800">
   <div className="flex items-center justify-between gap-4">
     <Link href="/" className="hover:opacity-90 transition">
-      <div className="text-2xl sm: text-3xl font-bold tracking-tight text-white">
+      <div className="text-2xl sm:text-3xl font-bold tracking-tight text-white">
         Spot<span className="text-blue-500">Fillr</span>
       </div>
     </Link>
@@ -216,7 +216,7 @@ export default function LandingPage() {
             <h2 className="text-2xl sm:text-3xl font-bold tracking-tight">Frequently asked questions</h2>
           </div>
 
-          <div id="faq" className="max-w-2xl mx-auto space-y-3">
+          <div className="max-w-2xl mx-auto space-y-3">
             <details className="group bg-slate-900 border border-slate-800/80 rounded-xl px-5 py-4">
               <summary className="flex items-center justify-between cursor-pointer list-none font-semibold text-sm text-white">
                 How does this work?
@@ -268,8 +268,13 @@ export default function LandingPage() {
       </main>
 
       {/* Footer Branding */}
-      <footer className="text-center text-xs text-slate-600 max-w-6xl w-full mx-auto pt-4 border-t border-slate-900">
-        &copy; {new Date().getFullYear()} SpotFillr. All rights reserved.
+      <footer className="text-center text-xs text-slate-600 max-w-6xl w-full mx-auto pt-4 border-t border-slate-900 space-y-2">
+        <div className="flex items-center justify-center gap-4">
+          <Link href="/privacy" className="hover:text-slate-400 transition">Privacy Policy</Link>
+          <span className="text-slate-800">&middot;</span>
+          <Link href="/terms" className="hover:text-slate-400 transition">Terms of Service</Link>
+        </div>
+        <p>&copy; {new Date().getFullYear()} SpotFillr. All rights reserved.</p>
       </footer>
 
     </div>
