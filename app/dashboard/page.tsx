@@ -3,6 +3,7 @@ import { redirect } from 'next/navigation'
 import { revalidatePath } from 'next/cache'
 import { sendBroadcastNotification } from '@/lib/notifications'
 import CancellationForm from '@/components/cancellation-form'
+import DashboardLive from '@/components/dashboard-live'
 import Link from 'next/link'
 
 export const dynamic = 'force-dynamic' // Force dynamic rendering to prevent stale page caches
@@ -148,45 +149,8 @@ export default async function DashboardPage() {
     return { status: 'success' as const, count: 0, message: 'Slot saved, but there are no active members to notify.' }
   }
 
-  // Metric Calculations
-  const upcomingSlots = allSlots?.filter((s) => s.lesson_date >= today) || []
-  const openCount = upcomingSlots.filter((s) => s.status === 'open').length
-  const claimedCount = allSlots?.filter((s) => s.status === 'claimed').length || 0
-  const expiredUnfilledCount = allSlots?.filter(
-    (s) => s.lesson_date < today && s.status === 'open'
-  ).length || 0
-
-  // Reporting: fill rate & frequent cancellations, both over a rolling 30-day
-  // window keyed on lesson_date (no extra queries — reuses allSlots).
-  const windowStart = new Date()
-  windowStart.setDate(windowStart.getDate() - 30)
-  const windowStartStr = windowStart.toLocaleDateString('en-CA', { timeZone: userTimezone })
-  const slotsInWindow = allSlots?.filter((s) => s.lesson_date >= windowStartStr) || []
-
-  // Fill rate only counts *resolved* outcomes (claimed, or open-but-passed =
-  // expired) — a slot that's still open and not yet due shouldn't count
-  // against the rate just because it hasn't been claimed yet.
-  const filledInWindow = slotsInWindow.filter((s) => s.status === 'claimed').length
-  const expiredInWindow = slotsInWindow.filter((s) => s.status === 'open' && s.lesson_date < today).length
-  const resolvedInWindow = filledInWindow + expiredInWindow
-  const fillRate = resolvedInWindow > 0 ? Math.round((filledInWindow / resolvedInWindow) * 100) : null
-
-  // Members with 3+ cancellations in the window
-  const cancellationCounts = new Map<string, { name: string; count: number; mostRecent: string }>()
-  slotsInWindow.forEach((s) => {
-    if (!s.canceling_member_id) return
-    const name = s.canceling_member?.name || 'Unknown'
-    const existing = cancellationCounts.get(s.canceling_member_id)
-    if (existing) {
-      existing.count += 1
-      if (s.lesson_date > existing.mostRecent) existing.mostRecent = s.lesson_date
-    } else {
-      cancellationCounts.set(s.canceling_member_id, { name, count: 1, mostRecent: s.lesson_date })
-    }
-  })
-  const frequentCancellers = Array.from(cancellationCounts.values())
-    .filter((m) => m.count >= 3)
-    .sort((a, b) => b.count - a.count)
+  // Metric computation now lives entirely in <DashboardLive>, which uses the
+  // same shared helper — no need to compute it twice.
 
   return (
     <div className="min-h-screen bg-slate-950 text-white p-4 sm:p-6 md:p-10">
@@ -260,34 +224,6 @@ export default async function DashboardPage() {
           </nav>
         </header>
 
-        {/* Metrics Row */}
-        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3 sm:gap-4">
-          <div className="bg-slate-900 border border-slate-800 rounded-xl p-3 sm:p-5">
-            <span className="text-[10px] sm:text-xs font-semibold uppercase text-slate-400 tracking-wider">Open Slots</span>
-            <p className="text-2xl sm:text-3xl font-bold text-amber-400 mt-1 sm:mt-2">{openCount}</p>
-          </div>
-          <div className="bg-slate-900 border border-slate-800 rounded-xl p-3 sm:p-5">
-            <span className="text-[10px] sm:text-xs font-semibold uppercase text-slate-400 tracking-wider">Recovered</span>
-            <p className="text-2xl sm:text-3xl font-bold text-emerald-400 mt-1 sm:mt-2">{claimedCount}</p>
-          </div>
-          <div className="bg-slate-900 border border-slate-800 rounded-xl p-3 sm:p-5">
-            <span className="text-[10px] sm:text-xs font-semibold uppercase text-slate-400 tracking-wider">Expired</span>
-            <p className="text-2xl sm:text-3xl font-bold text-rose-400 mt-1 sm:mt-2">{expiredUnfilledCount}</p>
-          </div>
-          <div className="bg-slate-900 border border-slate-800 rounded-xl p-3 sm:p-5">
-            <span className="text-[10px] sm:text-xs font-semibold uppercase text-slate-400 tracking-wider">Total Active</span>
-            <p className="text-2xl sm:text-3xl font-bold text-blue-400 mt-1 sm:mt-2">{upcomingSlots.length}</p>
-          </div>
-          <div className="bg-slate-900 border border-emerald-800/40 rounded-xl p-3 sm:p-5">
-            <span className="text-[10px] sm:text-xs font-semibold uppercase text-slate-400 tracking-wider">
-              Fill Rate <span className="text-slate-600 normal-case">· 30d</span>
-            </span>
-            <p className="text-2xl sm:text-3xl font-bold text-emerald-400 mt-1 sm:mt-2">
-              {fillRate === null ? '—' : `${fillRate}%`}
-            </p>
-          </div>
-        </div>
-
         {/* Form: Post Canceled Slot */}
         <section className="bg-slate-900 border border-slate-800 rounded-xl p-4 sm:p-6">
           <h2 className="text-base sm:text-lg font-semibold mb-0.5 sm:mb-1">Report Cancellation</h2>
@@ -302,87 +238,11 @@ export default async function DashboardPage() {
           />
         </section>
 
-        {/* Frequent Cancellations — only shown when someone actually crosses the threshold */}
-        {frequentCancellers.length > 0 && (
-          <section className="bg-slate-900 border border-slate-800 rounded-xl p-4 sm:p-6">
-            <div className="flex items-baseline justify-between mb-1">
-              <h2 className="text-base sm:text-lg font-semibold">Frequent Cancellations</h2>
-              <span className="text-[11px] text-slate-500">last 30 days</span>
-            </div>
-            <p className="text-xs text-slate-400 mb-4">Members who canceled 3 or more lessons.</p>
-
-            <div className="flex flex-col gap-2">
-              {frequentCancellers.map((m) => (
-                <div
-                  key={m.name}
-                  className="flex items-center justify-between bg-slate-950 border border-slate-800 rounded-lg px-3.5 py-2.5"
-                >
-                  <div>
-                    <div className="text-sm font-medium text-white">{m.name}</div>
-                    <div className="text-[11px] text-slate-500">most recent: {m.mostRecent}</div>
-                  </div>
-                  <span className="text-[11px] font-semibold text-amber-400 bg-amber-950/40 border border-amber-800/50 rounded-full px-2.5 py-1">
-                    {m.count} cancellations
-                  </span>
-                </div>
-              ))}
-            </div>
-          </section>
-        )}
-
-        {/* Activity Feed Section */}
-        <section className="bg-slate-900 border border-slate-800 rounded-xl p-4 sm:p-6">
-          <h2 className="text-base sm:text-lg font-semibold mb-3 sm:mb-4">Upcoming Canceled Slot Activity</h2>
-          {upcomingSlots.length > 0 ? (
-            <div className="-mx-4 sm:mx-0 overflow-x-auto">
-              <table className="w-full text-left text-xs sm:text-sm">
-                <thead>
-                  <tr className="border-b border-slate-800 text-[10px] sm:text-xs text-slate-400 uppercase">
-                    <th className="pl-4 sm:pl-0 pb-2.5 sm:pb-3 font-semibold">Canceled By</th>
-                    <th className="px-2 pb-2.5 sm:pb-3 font-semibold">Date & Time</th>
-                    <th className="px-2 pb-2.5 sm:pb-3 font-semibold">Status</th>
-                    <th className="pr-4 sm:pr-0 pb-2.5 sm:pb-3 font-semibold">Claimed By</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-800/70">
-                  {upcomingSlots.map((slot) => (
-                    <tr key={slot.id} className="hover:bg-slate-950/50 transition">
-                      <td className="pl-4 sm:pl-0 py-3 font-medium text-white text-[11px] sm:text-sm">
-                        {slot.canceling_member?.name || 'Unknown'}
-                      </td>
-                      <td className="px-2 py-3 text-slate-300 text-[11px] sm:text-sm whitespace-nowrap">
-                        <div>{slot.lesson_date}</div>
-                        <div className="text-[10px] sm:text-xs text-slate-400 font-mono">
-                          {slot.start_time.slice(0, 5)} - {slot.end_time.slice(0, 5)}
-                        </div>
-                      </td>
-                      <td className="px-2 py-3">
-                        <span className={`inline-block px-2 py-0.5 text-[10px] sm:text-xs font-semibold rounded-full border ${
-                          slot.status === 'open' 
-                            ? 'bg-amber-950/60 text-amber-400 border-amber-800/80' 
-                            : 'bg-emerald-950/60 text-emerald-400 border-emerald-800/80'
-                        }`}>
-                          {slot.status}
-                        </span>
-                      </td>
-                      <td className="pr-4 sm:pr-0 py-3 text-slate-400 text-[11px] sm:text-sm">
-                        {slot.status === 'claimed' ? (
-                          <span className="text-emerald-400 font-medium">
-                            {slot.claimed_member?.name || 'Member'}
-                          </span>
-                        ) : (
-                          <span className="text-slate-600">—</span>
-                        )}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          ) : (
-            <p className="text-slate-500 text-xs sm:text-sm">No upcoming canceled slots reported.</p>
-          )}
-        </section>
+        {/* Metrics, frequent cancellations, and activity feed — all live via
+            Supabase Realtime, updating within ~1s of any change to
+            canceled_lessons (a claim, a new cancellation, etc.) without
+            requiring a page reload. */}
+        <DashboardLive initialSlots={allSlots || []} today={today} />
 
       </div>
     </div>
