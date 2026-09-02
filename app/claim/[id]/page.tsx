@@ -13,16 +13,11 @@ export default async function ClaimSlotPage({ params, searchParams }: ClaimPageP
   const { memberId } = await searchParams
   const supabase = await createClient()
 
-  // 1. Fetch slot details with coach & original canceling member
-  const { data: slot } = await supabase
-    .from('canceled_lessons')
-    .select(`
-      *,
-      coach:coaches(name),
-      canceling_member:members!canceling_member_id(name)
-    `)
-    .eq('id', slotId)
-    .single()
+  // 1. Fetch slot details via a narrow RPC — returns only this one slot,
+  // regardless of login state, without granting broad table-wide read
+  // access to anonymous visitors.
+  const { data: slotRows } = await supabase.rpc('get_claimable_slot', { p_slot_id: slotId })
+  const slot = slotRows?.[0] || null
 
   // 2. If the link identifies a member (personalized notification link), look
   // them up so we can skip the dropdown entirely. Only fall back to fetching
@@ -93,7 +88,7 @@ export default async function ClaimSlotPage({ params, searchParams }: ClaimPageP
         <div className="text-center space-y-1">
           <span className="text-xs font-bold uppercase tracking-widest text-emerald-400">SpotFillr Alert</span>
           <h1 className="text-2xl font-extrabold text-white">Open Lesson Slot</h1>
-          <p className="text-xs text-slate-400">Coach {slot.coach?.name || 'Staff'}</p>
+          <p className="text-xs text-slate-400">Coach {slot.coach_name || 'Staff'}</p>
         </div>
 
         {/* Slot Details Card */}
@@ -110,7 +105,7 @@ export default async function ClaimSlotPage({ params, searchParams }: ClaimPageP
           </div>
           <div className="flex justify-between">
             <span className="text-slate-400">Open Slot From</span>
-            <span className="text-slate-300">{slot.canceling_member?.name || 'Cancellation'}</span>
+            <span className="text-slate-300">{slot.canceling_member_name || 'Cancellation'}</span>
           </div>
         </div>
 
