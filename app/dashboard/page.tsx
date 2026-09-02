@@ -82,7 +82,7 @@ export default async function DashboardPage() {
     // Get coach profile inside action to ensure correct club scoping
     const { data: activeCoach } = await supabase
       .from('coaches')
-      .select('club_id')
+      .select('club_id, name, timezone')
       .eq('id', user.id)
       .single()
 
@@ -112,18 +112,22 @@ export default async function DashboardPage() {
     // Broadcast ONLY to members of THIS club
     const { data: clubMembers } = await supabase
       .from('members')
-      .select('id, email, phone')
+      .select('id, email, phone, sms_opt_in')
       .eq('club_id', activeCoach?.club_id)
 
     if (clubMembers && clubMembers.length > 0) {
       await Promise.all(
         clubMembers.map((m) =>
           sendBroadcastNotification({
-            recipient: { id: m.id, email: m.email, phone: m.phone },
+            supabase,
+            // Everyone gets email; only members who've opted in get SMS.
+            recipient: { id: m.id, email: m.email, phone: m.sms_opt_in ? m.phone : null },
             slotId: newSlot.id,
             lessonDate: newSlot.lesson_date,
             startTime: newSlot.start_time,
             endTime: newSlot.end_time,
+            coachName: activeCoach?.name,
+            timezone: activeCoach?.timezone,
           })
         )
       )

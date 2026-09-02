@@ -58,6 +58,7 @@ export default async function MembersPage({ searchParams }: MembersPageProps) {
     const name = formData.get('name') as string
     const email = formData.get('email') as string
     const phone = formData.get('phone') as string
+    const smsOptIn = formData.get('sms_opt_in') === 'on'
 
     if (!name) return
 
@@ -78,6 +79,7 @@ export default async function MembersPage({ searchParams }: MembersPageProps) {
         name,
         email: email || null,
         phone: phone || null,
+        sms_opt_in: smsOptIn,
       })
 
     if (insertError) {
@@ -101,6 +103,7 @@ export default async function MembersPage({ searchParams }: MembersPageProps) {
     const name = formData.get('name') as string
     const email = formData.get('email') as string
     const phone = formData.get('phone') as string
+    const smsOptIn = formData.get('sms_opt_in') === 'on'
 
     if (!id || !name) return
 
@@ -110,6 +113,7 @@ export default async function MembersPage({ searchParams }: MembersPageProps) {
         name,
         email: email || null,
         phone: phone || null,
+        sms_opt_in: smsOptIn,
       })
       .eq('id', id)
 
@@ -358,6 +362,18 @@ export default async function MembersPage({ searchParams }: MembersPageProps) {
                 />
               </div>
 
+              <div className="sm:col-span-3 flex items-center gap-2 pt-1">
+                <input
+                  type="checkbox"
+                  name="sms_opt_in"
+                  id="add-sms-opt-in"
+                  className="w-3.5 h-3.5 rounded border-slate-700 bg-slate-950 text-emerald-500 focus:ring-emerald-500 focus:ring-offset-slate-900"
+                />
+                <label htmlFor="add-sms-opt-in" className="text-[11px] text-slate-400">
+                  This member wants text alerts (in addition to email) when a slot opens
+                </label>
+              </div>
+
               <div className="sm:col-span-3 pt-1">
                 <button
                   type="submit"
@@ -446,6 +462,19 @@ export default async function MembersPage({ searchParams }: MembersPageProps) {
                           placeholder="No phone"
                           className="w-full bg-slate-900 border border-slate-800 rounded-md px-2.5 py-1.5 text-xs text-slate-300 font-mono focus:outline-none focus:border-emerald-500"
                         />
+                      </div>
+
+                      <div className="sm:col-span-6 flex items-center gap-2">
+                        <input
+                          type="checkbox"
+                          name="sms_opt_in"
+                          id={`sms-opt-in-${m.id}`}
+                          defaultChecked={!!m.sms_opt_in}
+                          className="w-3.5 h-3.5 rounded border-slate-700 bg-slate-900 text-emerald-500 focus:ring-emerald-500 focus:ring-offset-slate-900"
+                        />
+                        <label htmlFor={`sms-opt-in-${m.id}`} className="text-[10px] text-slate-500">
+                          Wants text alerts
+                        </label>
                       </div>
                     </form>
 
