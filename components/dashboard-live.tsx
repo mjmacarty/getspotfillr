@@ -13,6 +13,15 @@ interface DashboardLiveProps {
 export default function DashboardLive({ initialSlots, today }: DashboardLiveProps) {
   const [slots, setSlots] = useState<DashboardSlot[]>(initialSlots)
 
+  // useState only uses `initialSlots` on first mount -- if the coach submits
+  // the cancellation form and the server re-renders this page with fresh
+  // data, that arrives as a new `initialSlots` prop, which this effect picks
+  // up and syncs into state. Without this, only the Realtime subscription
+  // below would ever update the UI, with no fallback if it hiccups.
+  useEffect(() => {
+    setSlots(initialSlots)
+  }, [initialSlots])
+
   const refetch = useCallback(async () => {
     try {
       const res = await fetch('/api/dashboard/slots', { cache: 'no-store' })
@@ -41,7 +50,13 @@ export default function DashboardLive({ initialSlots, today }: DashboardLiveProp
           refetch()
         }
       )
-      .subscribe()
+      .subscribe((status) => {
+        if (status === 'SUBSCRIBED') {
+          console.log('[Dashboard] Realtime connected')
+        } else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
+          console.error('[Dashboard] Realtime subscription failed:', status)
+        }
+      })
 
     return () => {
       supabase.removeChannel(channel)
