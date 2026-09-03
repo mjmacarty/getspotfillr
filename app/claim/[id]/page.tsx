@@ -7,12 +7,12 @@ export const dynamic = 'force-dynamic' // Never cache — a claim's success depe
 
 interface ClaimPageProps {
   params: Promise<{ id: string }>
-  searchParams: Promise<{ memberId?: string; claimError?: string }>
+  searchParams: Promise<{ memberId?: string; claimError?: string; debugMsg?: string }>
 }
 
 export default async function ClaimSlotPage({ params, searchParams }: ClaimPageProps) {
   const { id: slotId } = await params
-  const { memberId, claimError } = await searchParams
+  const { memberId, claimError, debugMsg } = await searchParams
   const supabase = await createClient()
 
   // 1. Fetch slot details via a narrow RPC — returns only this one slot,
@@ -51,19 +51,18 @@ export default async function ClaimSlotPage({ params, searchParams }: ClaimPageP
       .eq('status', 'open')
       .select()
 
-    // Temporary diagnostic logging -- shows exactly what the update actually
-    // did, since a rejected write and a zero-row match look identical from
-    // the outside otherwise.
-    console.log('[claimSlotAction] slotId:', slotId, 'memberId:', claimingMemberId)
-    console.log('[claimSlotAction] error:', JSON.stringify(error))
-    console.log('[claimSlotAction] updatedRows:', JSON.stringify(updatedRows))
-
     if (error) {
-      console.error('Error claiming slot:', error)
-      // Surface the failure instead of redirecting as if nothing went
-      // wrong — without this, a real database error looked identical to
-      // "nothing happened" when the button was clicked.
-      redirect(`/claim/${slotId}?memberId=${claimingMemberId}&claimError=1`)
+      // Temporary: put the real error message directly in the URL so it's
+      // visible on the page itself, since server logs have been hard to
+      // locate in the dashboard.
+      redirect(`/claim/${slotId}?memberId=${claimingMemberId}&claimError=1&debugMsg=${encodeURIComponent(error.message || 'unknown error')}`)
+    }
+
+    if (!updatedRows || updatedRows.length === 0) {
+      // The update ran with no error, but matched zero rows -- meaning
+      // either the slot ID was wrong, or (most likely) status was no
+      // longer 'open' by the time this ran.
+      redirect(`/claim/${slotId}?memberId=${claimingMemberId}&claimError=1&debugMsg=${encodeURIComponent('Update matched 0 rows')}`)
     }
 
     revalidatePath('/dashboard')
@@ -145,10 +144,15 @@ export default async function ClaimSlotPage({ params, searchParams }: ClaimPageP
         ) : (
           <form action={claimSlotAction} className="space-y-4">
             {claimError && (
-              <div className="bg-rose-950/40 border border-rose-800/80 rounded-xl p-3 text-center">
+              <div className="bg-rose-950/40 border border-rose-800/80 rounded-xl p-3 text-center space-y-1">
                 <p className="text-rose-400 text-xs font-medium">
                   Something went wrong claiming this slot. Please try again.
                 </p>
+                {debugMsg && (
+                  <p className="text-rose-300/70 text-[10px] font-mono break-words">
+                    Debug: {debugMsg}
+                  </p>
+                )}
               </div>
             )}
             <p className="text-sm text-slate-300 text-center">
