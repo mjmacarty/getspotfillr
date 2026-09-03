@@ -5,12 +5,12 @@ import { redirect } from 'next/navigation'
 
 interface ClaimPageProps {
   params: Promise<{ id: string }>
-  searchParams: Promise<{ memberId?: string }>
+  searchParams: Promise<{ memberId?: string; claimError?: string }>
 }
 
 export default async function ClaimSlotPage({ params, searchParams }: ClaimPageProps) {
   const { id: slotId } = await params
-  const { memberId } = await searchParams
+  const { memberId, claimError } = await searchParams
   const supabase = await createClient()
 
   // 1. Fetch slot details via a narrow RPC — returns only this one slot,
@@ -50,6 +50,10 @@ export default async function ClaimSlotPage({ params, searchParams }: ClaimPageP
 
     if (error) {
       console.error('Error claiming slot:', error)
+      // Surface the failure instead of redirecting as if nothing went
+      // wrong — without this, a real database error looked identical to
+      // "nothing happened" when the button was clicked.
+      redirect(`/claim/${slotId}?memberId=${claimingMemberId}&claimError=1`)
     }
 
     revalidatePath('/dashboard')
@@ -130,6 +134,13 @@ export default async function ClaimSlotPage({ params, searchParams }: ClaimPageP
           </div>
         ) : (
           <form action={claimSlotAction} className="space-y-4">
+            {claimError && (
+              <div className="bg-rose-950/40 border border-rose-800/80 rounded-xl p-3 text-center">
+                <p className="text-rose-400 text-xs font-medium">
+                  Something went wrong claiming this slot. Please try again.
+                </p>
+              </div>
+            )}
             <p className="text-sm text-slate-300 text-center">
               Claiming for <span className="font-semibold text-white">{linkedMember.name}</span>
             </p>
