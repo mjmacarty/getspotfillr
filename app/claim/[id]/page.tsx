@@ -1,5 +1,6 @@
 // app/claim/[id]/page.tsx
 import { createClient } from '@/lib/supabase/server'
+import { createClient as createBareClient } from '@supabase/supabase-js'
 import { revalidatePath } from 'next/cache'
 import { redirect } from 'next/navigation'
 
@@ -42,24 +43,33 @@ export default async function ClaimSlotPage({ params, searchParams }: ClaimPageP
     // this one call, using the bare supabase-js library with only the URL
     // and key -- isolating whether session/cookie handling specific to the
     // SSR client is interfering with how this request authenticates.
-    const { createClient: createBareClient } = await import('@supabase/supabase-js')
-    const bareSupabase = createBareClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-    )
+    let updateError: string | null = null
+    try {
+      const bareSupabase = createBareClient(
+        process.env.NEXT_PUBLIC_SUPABASE_URL!,
+        process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+      )
 
-    const { error } = await bareSupabase
-      .from('canceled_lessons')
-      .update({
-        status: 'claimed',
-        claimed_by_member_id: claimingMemberId,
-        claimed_at: new Date().toISOString(),
-      })
-      .eq('id', slotId)
-      .eq('status', 'open')
+      const { error } = await bareSupabase
+        .from('canceled_lessons')
+        .update({
+          status: 'claimed',
+          claimed_by_member_id: claimingMemberId,
+          claimed_at: new Date().toISOString(),
+        })
+        .eq('id', slotId)
+        .eq('status', 'open')
 
-    if (error) {
-      redirect(`/claim/${slotId}?memberId=${claimingMemberId}&claimError=1&debugMsg=${encodeURIComponent(error.message || 'unknown error')}`)
+      if (error) updateError = error.message || 'unknown Supabase error'
+    } catch (err) {
+      // Catches anything that crashes outright (e.g. a bad import, a
+      // missing env var) rather than letting it fail silently with no
+      // redirect and no visible feedback at all.
+      updateError = err instanceof Error ? err.message : String(err)
+    }
+
+    if (updateError) {
+      redirect(`/claim/${slotId}?memberId=${claimingMemberId}&claimError=1&debugMsg=${encodeURIComponent(updateError)}`)
     }
 
     revalidatePath('/dashboard')
