@@ -3,7 +3,6 @@ import { createClient } from '@/lib/supabase/server'
 import { revalidatePath } from 'next/cache'
 import { redirect } from 'next/navigation'
 
-
 export const dynamic = 'force-dynamic' // Never cache — a claim's success depends on always reading current status
 
 interface ClaimPageProps {
@@ -41,29 +40,25 @@ export default async function ClaimSlotPage({ params, searchParams }: ClaimPageP
     if (!claimingMemberId) return
 
     // Atomic update: only claim if status is still 'open' (prevents race conditions)
-    const { data: updatedRows, error } = await supabase
+    // NOTE: temporarily not using .select() here — testing whether asking
+    // PostgREST to return the updated row requires read access we don't
+    // grant anonymous visitors, separate from the write itself succeeding.
+    const { error, count } = await supabase
       .from('canceled_lessons')
       .update({
         status: 'claimed',
         claimed_by_member_id: claimingMemberId,
         claimed_at: new Date().toISOString(),
-      })
+      }, { count: 'exact' })
       .eq('id', slotId)
       .eq('status', 'open')
-      .select()
 
     if (error) {
-      // Temporary: put the real error message directly in the URL so it's
-      // visible on the page itself, since server logs have been hard to
-      // locate in the dashboard.
       redirect(`/claim/${slotId}?memberId=${claimingMemberId}&claimError=1&debugMsg=${encodeURIComponent(error.message || 'unknown error')}`)
     }
 
-    if (!updatedRows || updatedRows.length === 0) {
-      // The update ran with no error, but matched zero rows -- meaning
-      // either the slot ID was wrong, or (most likely) status was no
-      // longer 'open' by the time this ran.
-      redirect(`/claim/${slotId}?memberId=${claimingMemberId}&claimError=1&debugMsg=${encodeURIComponent('Update matched 0 rows')}`)
+    if (!count || count === 0) {
+      redirect(`/claim/${slotId}?memberId=${claimingMemberId}&claimError=1&debugMsg=${encodeURIComponent('Update matched 0 rows (no .select())')}`)
     }
 
     revalidatePath('/dashboard')
