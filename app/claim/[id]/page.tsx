@@ -19,22 +19,15 @@ export default async function ClaimSlotPage({ params, searchParams }: ClaimPageP
   const { data: slotRows } = await supabase.rpc('get_claimable_slot', { p_slot_id: slotId })
   const slot = slotRows?.[0] || null
 
-  // 2. If the link identifies a member (personalized notification link), look
-  // them up so we can skip the dropdown entirely. Only fall back to fetching
-  // the full member list if we don't know who's clicking.
+  // 2. Look up the linked member via a narrow RPC — returns only this one
+  // member's name, never phone/email or the rest of the roster. Every real
+  // notification link SpotFillr generates always includes memberId, so
+  // there's no legitimate case where this is missing.
   let linkedMember: { id: string; name: string } | null = null
   if (memberId) {
-    const { data } = await supabase
-      .from('members')
-      .select('id, name')
-      .eq('id', memberId)
-      .single()
-    linkedMember = data
+    const { data } = await supabase.rpc('get_member_name', { p_member_id: memberId })
+    linkedMember = data?.[0] || null
   }
-
-  const { data: members } = linkedMember
-    ? { data: null }
-    : await supabase.from('members').select('id, name').order('name', { ascending: true })
 
   // SERVER ACTION: Claim the slot
   async function claimSlotAction(formData: FormData) {
@@ -71,6 +64,19 @@ export default async function ClaimSlotPage({ params, searchParams }: ClaimPageP
         <div className="max-w-md space-y-4">
           <h1 className="text-2xl font-bold text-rose-400">Slot Not Found</h1>
           <p className="text-sm text-slate-400">This lesson offer may have been deleted or the link is invalid.</p>
+        </div>
+      </div>
+    )
+  }
+
+  if (!linkedMember) {
+    return (
+      <div className="min-h-screen bg-slate-950 text-white flex items-center justify-center p-6 text-center">
+        <div className="max-w-md space-y-4">
+          <h1 className="text-2xl font-bold text-rose-400">Invalid Link</h1>
+          <p className="text-sm text-slate-400">
+            This claim link is missing some information. Please use the link exactly as it appeared in your email or text.
+          </p>
         </div>
       </div>
     )
@@ -113,7 +119,7 @@ export default async function ClaimSlotPage({ params, searchParams }: ClaimPageP
         {isClaimedByMe ? (
           <div className="bg-emerald-950/40 border border-emerald-800/80 rounded-xl p-4 text-center space-y-1">
             <p className="text-emerald-400 font-bold text-sm">
-              You&apos;re confirmed{linkedMember ? `, ${linkedMember.name}` : ''}!
+              You&apos;re confirmed, {linkedMember.name}!
             </p>
             <p className="text-xs text-slate-400">This lesson slot is booked for you.</p>
           </div>
@@ -124,32 +130,10 @@ export default async function ClaimSlotPage({ params, searchParams }: ClaimPageP
           </div>
         ) : (
           <form action={claimSlotAction} className="space-y-4">
-            {linkedMember ? (
-              <>
-                <p className="text-sm text-slate-300 text-center">
-                  Claiming for <span className="font-semibold text-white">{linkedMember.name}</span>
-                </p>
-                <input type="hidden" name="claiming_member_id" value={linkedMember.id} />
-              </>
-            ) : (
-              <div>
-                <label className="block text-xs font-medium text-slate-300 mb-1.5">
-                  Select Your Name / Fencer Name
-                </label>
-                <select
-                  name="claiming_member_id"
-                  required
-                  className="w-full bg-slate-950 border border-slate-800 rounded-lg p-3 text-sm text-white focus:outline-none focus:border-emerald-500"
-                >
-                  <option value="">-- Choose Member --</option>
-                  {members?.map((m) => (
-                    <option key={m.id} value={m.id}>
-                      {m.name}
-                    </option>
-                  ))}
-                </select>
-              </div>
-            )}
+            <p className="text-sm text-slate-300 text-center">
+              Claiming for <span className="font-semibold text-white">{linkedMember.name}</span>
+            </p>
+            <input type="hidden" name="claiming_member_id" value={linkedMember.id} />
 
             <button
               type="submit"
