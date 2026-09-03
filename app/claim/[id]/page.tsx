@@ -3,6 +3,7 @@ import { createClient } from '@/lib/supabase/server'
 import { revalidatePath } from 'next/cache'
 import { redirect } from 'next/navigation'
 
+
 export const dynamic = 'force-dynamic' // Never cache — a claim's success depends on always reading current status
 
 interface ClaimPageProps {
