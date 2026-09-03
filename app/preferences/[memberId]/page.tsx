@@ -16,11 +16,8 @@ export default async function PreferencesPage({ params, searchParams }: Preferen
   const { saved, error: saveError } = await searchParams
   const supabase = await createClient()
 
-  const { data: member } = await supabase
-    .from('members')
-    .select('id, name, phone, sms_opt_in')
-    .eq('id', memberId)
-    .single()
+  const { data: memberRows } = await supabase.rpc('get_member_preferences', { p_member_id: memberId })
+  const member = memberRows?.[0] || null
 
   async function savePreferencesAction(formData: FormData) {
     'use server'
