@@ -58,7 +58,7 @@ export default async function ClaimSlotPage({ params, searchParams }: ClaimPageP
     }
 
     if (!count || count === 0) {
-      redirect(`/claim/${slotId}?memberId=${claimingMemberId}&claimError=1&debugMsg=${encodeURIComponent('Update matched 0 rows (no .select())')}`)
+      redirect(`/claim/${slotId}?memberId=${claimingMemberId}&claimError=1&debugMsg=${encodeURIComponent(`0 rows. slotId="${slotId}" (len ${slotId.length})`)}`)
     }
 
     revalidatePath('/dashboard')
@@ -122,6 +122,14 @@ export default async function ClaimSlotPage({ params, searchParams }: ClaimPageP
             <span className="text-slate-400">Open Slot From</span>
             <span className="text-slate-300">{slot.canceling_member_name || 'Cancellation'}</span>
           </div>
+        </div>
+
+        {/* Temporary diagnostic — comparing the URL's slotId against what the RPC read actually returned */}
+        <div className="text-[10px] font-mono text-slate-600 break-words space-y-0.5">
+          <div>URL slotId: &quot;{slotId}&quot; (len {slotId.length})</div>
+          <div>RPC slot.id: &quot;{slot.id}&quot; (len {String(slot.id).length})</div>
+          <div>RPC slot.status: &quot;{slot.status}&quot;</div>
+          <div>Match: {String(slot.id) === slotId ? 'YES' : 'NO'}</div>
         </div>
 
         {/* Status / Claim Form */}
