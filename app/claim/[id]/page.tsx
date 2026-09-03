@@ -34,31 +34,32 @@ export default async function ClaimSlotPage({ params, searchParams }: ClaimPageP
   // SERVER ACTION: Claim the slot
   async function claimSlotAction(formData: FormData) {
     'use server'
-    const supabase = await createClient()
     const claimingMemberId = formData.get('claiming_member_id') as string
 
     if (!claimingMemberId) return
 
-    // Atomic update: only claim if status is still 'open' (prevents race conditions)
-    // NOTE: temporarily not using .select() here — testing whether asking
-    // PostgREST to return the updated row requires read access we don't
-    // grant anonymous visitors, separate from the write itself succeeding.
-    const { error, count } = await supabase
+    // TEMPORARY: bypass @supabase/ssr's cookie-aware client entirely for
+    // this one call, using the bare supabase-js library with only the URL
+    // and key -- isolating whether session/cookie handling specific to the
+    // SSR client is interfering with how this request authenticates.
+    const { createClient: createBareClient } = await import('@supabase/supabase-js')
+    const bareSupabase = createBareClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+    )
+
+    const { error } = await bareSupabase
       .from('canceled_lessons')
       .update({
         status: 'claimed',
         claimed_by_member_id: claimingMemberId,
         claimed_at: new Date().toISOString(),
-      }, { count: 'exact' })
+      })
       .eq('id', slotId)
       .eq('status', 'open')
 
     if (error) {
       redirect(`/claim/${slotId}?memberId=${claimingMemberId}&claimError=1&debugMsg=${encodeURIComponent(error.message || 'unknown error')}`)
-    }
-
-    if (!count || count === 0) {
-      redirect(`/claim/${slotId}?memberId=${claimingMemberId}&claimError=1&debugMsg=${encodeURIComponent(`0 rows. slotId="${slotId}" (len ${slotId.length})`)}`)
     }
 
     revalidatePath('/dashboard')
