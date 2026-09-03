@@ -40,7 +40,7 @@ export default async function ClaimSlotPage({ params, searchParams }: ClaimPageP
     if (!claimingMemberId) return
 
     // Atomic update: only claim if status is still 'open' (prevents race conditions)
-    const { error } = await supabase
+    const { data: updatedRows, error } = await supabase
       .from('canceled_lessons')
       .update({
         status: 'claimed',
@@ -49,6 +49,14 @@ export default async function ClaimSlotPage({ params, searchParams }: ClaimPageP
       })
       .eq('id', slotId)
       .eq('status', 'open')
+      .select()
+
+    // Temporary diagnostic logging -- shows exactly what the update actually
+    // did, since a rejected write and a zero-row match look identical from
+    // the outside otherwise.
+    console.log('[claimSlotAction] slotId:', slotId, 'memberId:', claimingMemberId)
+    console.log('[claimSlotAction] error:', JSON.stringify(error))
+    console.log('[claimSlotAction] updatedRows:', JSON.stringify(updatedRows))
 
     if (error) {
       console.error('Error claiming slot:', error)
