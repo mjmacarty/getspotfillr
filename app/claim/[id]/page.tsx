@@ -1,6 +1,5 @@
 // app/claim/[id]/page.tsx
 import { createClient } from '@/lib/supabase/server'
-import { createClient as createBareClient } from '@supabase/supabase-js'
 import { revalidatePath } from 'next/cache'
 import { redirect } from 'next/navigation'
 
@@ -39,32 +38,41 @@ export default async function ClaimSlotPage({ params, searchParams }: ClaimPageP
 
     if (!claimingMemberId) return
 
-    // TEMPORARY: bypass @supabase/ssr's cookie-aware client entirely for
-    // this one call, using the bare supabase-js library with only the URL
-    // and key -- isolating whether session/cookie handling specific to the
-    // SSR client is interfering with how this request authenticates.
+    // TEMPORARY: bypass supabase-js entirely, using a raw fetch() PATCH
+    // built to exactly mirror the PowerShell test that succeeded --
+    // isolating whether the client library itself constructs a
+    // meaningfully different request than a raw HTTP call.
     let updateError: string | null = null
     try {
-      const bareSupabase = createBareClient(
-        process.env.NEXT_PUBLIC_SUPABASE_URL!,
-        process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-      )
+      const url = `${process.env.NEXT_PUBLIC_SUPABASE_URL}/rest/v1/canceled_lessons?id=eq.${slotId}&status=eq.open`
+      const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
 
-      const { error } = await bareSupabase
-        .from('canceled_lessons')
-        .update({
+      const res = await fetch(url, {
+        method: 'PATCH',
+        headers: {
+          apikey: key,
+          Authorization: `Bearer ${key}`,
+          'Content-Type': 'application/json',
+          Prefer: 'return=representation',
+        },
+        body: JSON.stringify({
           status: 'claimed',
           claimed_by_member_id: claimingMemberId,
           claimed_at: new Date().toISOString(),
-        })
-        .eq('id', slotId)
-        .eq('status', 'open')
+        }),
+      })
 
-      if (error) updateError = error.message || 'unknown Supabase error'
+      const bodyText = await res.text()
+
+      if (!res.ok) {
+        updateError = `HTTP ${res.status}: ${bodyText}`
+      } else {
+        const parsed = JSON.parse(bodyText || '[]')
+        if (!Array.isArray(parsed) || parsed.length === 0) {
+          updateError = `Fetch succeeded but matched 0 rows. Status ${res.status}, body: ${bodyText}`
+        }
+      }
     } catch (err) {
-      // Catches anything that crashes outright (e.g. a bad import, a
-      // missing env var) rather than letting it fail silently with no
-      // redirect and no visible feedback at all.
       updateError = err instanceof Error ? err.message : String(err)
     }
 
