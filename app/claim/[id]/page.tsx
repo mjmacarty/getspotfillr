@@ -130,6 +130,14 @@ export default async function ClaimSlotPage({ params, searchParams }: ClaimPageP
           <div>RPC slot.id: &quot;{slot.id}&quot; (len {String(slot.id).length})</div>
           <div>RPC slot.status: &quot;{slot.status}&quot;</div>
           <div>Match: {String(slot.id) === slotId ? 'YES' : 'NO'}</div>
+          <div>ENV url: &quot;{process.env.NEXT_PUBLIC_SUPABASE_URL}&quot;</div>
+          <div>
+            ENV key (first 25 + last 10): &quot;
+            {(process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '').slice(0, 25)}
+            ...
+            {(process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '').slice(-10)}
+            &quot; (len {(process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '').length})
+          </div>
         </div>
 
         {/* Status / Claim Form */}
