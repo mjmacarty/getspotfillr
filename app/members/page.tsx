@@ -58,7 +58,6 @@ export default async function MembersPage({ searchParams }: MembersPageProps) {
     const name = formData.get('name') as string
     const email = formData.get('email') as string
     const phone = formData.get('phone') as string
-    const smsOptIn = formData.get('sms_opt_in') === 'on'
 
     if (!name) return
 
@@ -79,7 +78,10 @@ export default async function MembersPage({ searchParams }: MembersPageProps) {
         name,
         email: email || null,
         phone: phone || null,
-        sms_opt_in: smsOptIn,
+        // SMS consent is deliberately NOT settable here. Consent must come
+        // from the member themselves via their preferences link — a coach
+        // ticking a box on someone's behalf isn't valid consent under TCPA.
+        sms_opt_in: false,
       })
 
     if (insertError) {
@@ -103,7 +105,6 @@ export default async function MembersPage({ searchParams }: MembersPageProps) {
     const name = formData.get('name') as string
     const email = formData.get('email') as string
     const phone = formData.get('phone') as string
-    const smsOptIn = formData.get('sms_opt_in') === 'on'
 
     if (!id || !name) return
 
@@ -113,11 +114,26 @@ export default async function MembersPage({ searchParams }: MembersPageProps) {
         name,
         email: email || null,
         phone: phone || null,
-        sms_opt_in: smsOptIn,
+        // sms_opt_in deliberately omitted — see addMemberAction.
       })
       .eq('id', id)
 
     if (updateError) console.error('Error updating member:', updateError)
+    revalidatePath('/members')
+  }
+
+  // SERVER ACTION: Revoke a member's SMS consent.
+  // Coaches may turn text alerts OFF for a member (e.g. a parent asks them
+  // to stop), but never ON — granting consent has to come from the member
+  // via their own preferences link.
+  async function revokeSmsConsentAction(formData: FormData) {
+    'use server'
+    const supabase = await createClient()
+    const id = formData.get('id') as string
+    if (!id) return
+
+    const { error } = await supabase.rpc('coach_revoke_sms_consent', { p_member_id: id })
+    if (error) console.error('Error revoking SMS consent:', error)
     revalidatePath('/members')
   }
 
@@ -362,16 +378,11 @@ export default async function MembersPage({ searchParams }: MembersPageProps) {
                 />
               </div>
 
-              <div className="sm:col-span-3 flex items-center gap-2 pt-1">
-                <input
-                  type="checkbox"
-                  name="sms_opt_in"
-                  id="add-sms-opt-in"
-                  className="w-3.5 h-3.5 rounded border-slate-700 bg-slate-950 text-emerald-500 focus:ring-emerald-500 focus:ring-offset-slate-900"
-                />
-                <label htmlFor="add-sms-opt-in" className="text-[11px] text-slate-400">
-                  This member wants text alerts (in addition to email) when a slot opens
-                </label>
+              <div className="sm:col-span-3 pt-1">
+                <p className="text-[11px] text-slate-500">
+                  Members get email alerts automatically. Text alerts require the member to opt in
+                  themselves &mdash; there&apos;s a link to do that at the bottom of every alert email.
+                </p>
               </div>
 
               <div className="sm:col-span-3 pt-1">
@@ -464,18 +475,36 @@ export default async function MembersPage({ searchParams }: MembersPageProps) {
                         />
                       </div>
 
-                      <div className="sm:col-span-6 flex items-center gap-2">
-                        <input
-                          type="checkbox"
-                          name="sms_opt_in"
-                          id={`sms-opt-in-${m.id}`}
-                          defaultChecked={!!m.sms_opt_in}
-                          className="w-3.5 h-3.5 rounded border-slate-700 bg-slate-900 text-emerald-500 focus:ring-emerald-500 focus:ring-offset-slate-900"
-                        />
-                        <label htmlFor={`sms-opt-in-${m.id}`} className="text-[10px] text-slate-500">
-                          Wants text alerts
-                        </label>
+                      <div className="sm:col-span-6 flex items-center gap-2 flex-wrap">
+                        {m.sms_opt_in ? (
+                          <>
+                            <span className="text-[10px] font-semibold text-emerald-400 bg-emerald-950/40 border border-emerald-800/50 rounded-full px-2 py-0.5">
+                              Text alerts on
+                            </span>
+                            {m.sms_opt_in_at && (
+                              <span className="text-[10px] text-slate-600">
+                                since {new Date(m.sms_opt_in_at).toLocaleDateString()}
+                              </span>
+                            )}
+                            <button
+                              type="submit"
+                              form={`revoke-sms-${m.id}`}
+                              className="text-[10px] text-slate-500 hover:text-rose-400 underline transition cursor-pointer"
+                            >
+                              Turn off
+                            </button>
+                          </>
+                        ) : (
+                          <span className="text-[10px] text-slate-600">
+                            Email only &mdash; member can enable texts from their preferences link
+                          </span>
+                        )}
                       </div>
+                    </form>
+
+                    {/* Separate form so revoking isn't bundled into the edit form */}
+                    <form action={revokeSmsConsentAction} id={`revoke-sms-${m.id}`} className="hidden">
+                      <input type="hidden" name="id" value={m.id} />
                     </form>
 
                     {/* Action Buttons */}
