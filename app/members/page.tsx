@@ -475,37 +475,40 @@ export default async function MembersPage({ searchParams }: MembersPageProps) {
                         />
                       </div>
 
-                      <div className="sm:col-span-6 flex items-center gap-2 flex-wrap">
-                        {m.sms_opt_in ? (
-                          <>
-                            <span className="text-[10px] font-semibold text-emerald-400 bg-emerald-950/40 border border-emerald-800/50 rounded-full px-2 py-0.5">
-                              Text alerts on
+                    </form>
+
+                    {/* SMS consent status. Deliberately OUTSIDE the update
+                        form: the Turn off button needs to sit inside its own
+                        form, since React server actions don't reliably
+                        support a button in one form targeting another via
+                        the `form` attribute. */}
+                    <div className="sm:col-span-12 flex items-center gap-2 flex-wrap pt-1">
+                      {m.sms_opt_in ? (
+                        <>
+                          <span className="text-[10px] font-semibold text-emerald-400 bg-emerald-950/40 border border-emerald-800/50 rounded-full px-2 py-0.5">
+                            Text alerts on
+                          </span>
+                          {m.sms_opt_in_at && (
+                            <span className="text-[10px] text-slate-600">
+                              since {new Date(m.sms_opt_in_at).toLocaleDateString()}
                             </span>
-                            {m.sms_opt_in_at && (
-                              <span className="text-[10px] text-slate-600">
-                                since {new Date(m.sms_opt_in_at).toLocaleDateString()}
-                              </span>
-                            )}
+                          )}
+                          <form action={revokeSmsConsentAction}>
+                            <input type="hidden" name="id" value={m.id} />
                             <button
                               type="submit"
-                              form={`revoke-sms-${m.id}`}
                               className="text-[10px] text-slate-500 hover:text-rose-400 underline transition cursor-pointer"
                             >
                               Turn off
                             </button>
-                          </>
-                        ) : (
-                          <span className="text-[10px] text-slate-600">
-                            Email only &mdash; member can enable texts from their preferences link
-                          </span>
-                        )}
-                      </div>
-                    </form>
-
-                    {/* Separate form so revoking isn't bundled into the edit form */}
-                    <form action={revokeSmsConsentAction} id={`revoke-sms-${m.id}`} className="hidden">
-                      <input type="hidden" name="id" value={m.id} />
-                    </form>
+                          </form>
+                        </>
+                      ) : (
+                        <span className="text-[10px] text-slate-600">
+                          Email only &mdash; member can enable texts from their preferences link
+                        </span>
+                      )}
+                    </div>
 
                     {/* Action Buttons */}
                     <div className="sm:col-span-2 flex items-center justify-end gap-2 pt-2 sm:pt-0 border-t sm:border-t-0 border-slate-900">
