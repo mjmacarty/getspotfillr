@@ -477,12 +477,34 @@ export default async function MembersPage({ searchParams }: MembersPageProps) {
 
                     </form>
 
-                    {/* SMS consent status. Deliberately OUTSIDE the update
-                        form: the Turn off button needs to sit inside its own
-                        form, since React server actions don't reliably
-                        support a button in one form targeting another via
-                        the `form` attribute. */}
-                    <div className="sm:col-span-12 flex items-center gap-2 flex-wrap pt-1">
+                    {/* Action Buttons */}
+                    <div className="sm:col-span-2 flex items-center justify-end gap-2 pt-2 sm:pt-0 border-t sm:border-t-0 border-slate-900">
+                      <button
+                        type="submit"
+                        form={`update-${m.id}`}
+                        className="flex-1 sm:flex-none px-3 py-1.5 bg-slate-800 hover:bg-slate-700 border border-slate-700 text-[11px] font-semibold text-slate-300 rounded-md transition cursor-pointer"
+                      >
+                        Save
+                      </button>
+
+                      <form action={deleteMemberAction} className="flex-1 sm:flex-none">
+                        <input type="hidden" name="id" value={m.id} />
+                        <button
+                          type="submit"
+                          className="w-full px-3 py-1.5 bg-rose-950/40 hover:bg-rose-900/60 border border-rose-900/60 text-[11px] font-semibold text-rose-400 rounded-md transition cursor-pointer"
+                        >
+                          Delete
+                        </button>
+                      </form>
+                    </div>
+
+                    {/* SMS consent status, on its own row beneath the member
+                        fields so the Save/Delete buttons stay inline with
+                        them. Deliberately OUTSIDE the update form: the Turn
+                        off button needs its own form, since React server
+                        actions don't reliably support a button in one form
+                        targeting another via the `form` attribute. */}
+                    <div className="sm:col-span-12 flex items-center gap-2 flex-wrap">
                       {m.sms_opt_in ? (
                         <>
                           <span className="text-[10px] font-semibold text-emerald-400 bg-emerald-950/40 border border-emerald-800/50 rounded-full px-2 py-0.5">
@@ -508,27 +530,6 @@ export default async function MembersPage({ searchParams }: MembersPageProps) {
                           Email only &mdash; member can enable texts from their preferences link
                         </span>
                       )}
-                    </div>
-
-                    {/* Action Buttons */}
-                    <div className="sm:col-span-2 flex items-center justify-end gap-2 pt-2 sm:pt-0 border-t sm:border-t-0 border-slate-900">
-                      <button
-                        type="submit"
-                        form={`update-${m.id}`}
-                        className="flex-1 sm:flex-none px-3 py-1.5 bg-slate-800 hover:bg-slate-700 border border-slate-700 text-[11px] font-semibold text-slate-300 rounded-md transition cursor-pointer"
-                      >
-                        Save
-                      </button>
-
-                      <form action={deleteMemberAction} className="flex-1 sm:flex-none">
-                        <input type="hidden" name="id" value={m.id} />
-                        <button
-                          type="submit"
-                          className="w-full px-3 py-1.5 bg-rose-950/40 hover:bg-rose-900/60 border border-rose-900/60 text-[11px] font-semibold text-rose-400 rounded-md transition cursor-pointer"
-                        >
-                          Delete
-                        </button>
-                      </form>
                     </div>
 
                   </div>
