@@ -35,31 +35,58 @@ export default function DashboardLive({ initialSlots, today }: DashboardLiveProp
 
   useEffect(() => {
     const supabase = createClient()
+    let cancelled = false
+    let channel: ReturnType<typeof supabase.channel> | null = null
 
-    // Any insert/update/delete on canceled_lessons triggers a refetch of the
-    // club-scoped view via the API route, rather than trying to hand-merge
-    // partial realtime payloads (Realtime's row-level filters can't express
-    // "this coach's club" since that requires a join canceled_lessons alone
-    // doesn't support).
-    const channel = supabase
-      .channel('canceled_lessons-changes')
-      .on(
-        'postgres_changes',
-        { event: '*', schema: 'public', table: 'canceled_lessons' },
-        () => {
-          refetch()
-        }
-      )
-      .subscribe((status) => {
-        if (status === 'SUBSCRIBED') {
-          console.log('[Dashboard] Realtime connected')
-        } else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
-          console.error('[Dashboard] Realtime subscription failed:', status)
-        }
-      })
+    async function setupRealtime() {
+      // Realtime's postgres_changes enforces RLS against whoever the socket
+      // is authenticated as. With cookie-based sessions the socket can
+      // connect before the session has loaded, authenticating as `anon` --
+      // which has no SELECT policy on canceled_lessons, so no events are
+      // ever delivered even though the subscription reports SUBSCRIBED.
+      // Setting the token explicitly before subscribing avoids that race.
+      const { data: { session } } = await supabase.auth.getSession()
+      if (cancelled) return
+
+      if (session?.access_token) {
+        await supabase.realtime.setAuth(session.access_token)
+      }
+      if (cancelled) return
+
+      channel = supabase
+        .channel('canceled_lessons-changes')
+        .on(
+          'postgres_changes',
+          { event: '*', schema: 'public', table: 'canceled_lessons' },
+          () => {
+            refetch()
+          }
+        )
+        .subscribe((status) => {
+          if (status === 'SUBSCRIBED') {
+            console.log('[Dashboard] Realtime connected')
+          } else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
+            console.error('[Dashboard] Realtime subscription failed:', status)
+          }
+        })
+    }
+
+    setupRealtime()
+
+    // Fallbacks so the dashboard can't go stale even if Realtime stops
+    // delivering: refetch when the tab regains focus, and poll on a slow
+    // timer as a safety net.
+    const onVisible = () => {
+      if (document.visibilityState === 'visible') refetch()
+    }
+    document.addEventListener('visibilitychange', onVisible)
+    const pollId = setInterval(refetch, 30000)
 
     return () => {
-      supabase.removeChannel(channel)
+      cancelled = true
+      document.removeEventListener('visibilitychange', onVisible)
+      clearInterval(pollId)
+      if (channel) supabase.removeChannel(channel)
     }
   }, [refetch])
 
