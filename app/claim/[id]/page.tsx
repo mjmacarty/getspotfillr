@@ -7,12 +7,12 @@ export const dynamic = 'force-dynamic' // Never cache — a claim's success depe
 
 interface ClaimPageProps {
   params: Promise<{ id: string }>
-  searchParams: Promise<{ memberId?: string; claimError?: string; debugMsg?: string }>
+  searchParams: Promise<{ memberId?: string; claimError?: string }>
 }
 
 export default async function ClaimSlotPage({ params, searchParams }: ClaimPageProps) {
   const { id: slotId } = await params
-  const { memberId, claimError, debugMsg } = await searchParams
+  const { memberId, claimError } = await searchParams
   const supabase = await createClient()
 
   // 1. Fetch slot details via a narrow RPC — returns only this one slot,
@@ -34,50 +34,28 @@ export default async function ClaimSlotPage({ params, searchParams }: ClaimPageP
   // SERVER ACTION: Claim the slot
   async function claimSlotAction(formData: FormData) {
     'use server'
+    const supabase = await createClient()
     const claimingMemberId = formData.get('claiming_member_id') as string
 
     if (!claimingMemberId) return
 
-    // TEMPORARY: bypass supabase-js entirely, using a raw fetch() PATCH
-    // built to exactly mirror the PowerShell test that succeeded --
-    // isolating whether the client library itself constructs a
-    // meaningfully different request than a raw HTTP call.
-    let updateError: string | null = null
-    try {
-      const url = `${process.env.NEXT_PUBLIC_SUPABASE_URL}/rest/v1/canceled_lessons?id=eq.${slotId}&status=eq.open`
-      const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+    // Claim via a SECURITY DEFINER RPC rather than a direct table UPDATE.
+    // A direct UPDATE ... WHERE needs to READ rows to decide which to
+    // change, and that read is governed by SELECT policies — which
+    // anonymous visitors don't have on this table. That's why the direct
+    // update silently matched 0 rows with no error. The RPC does the same
+    // atomic "claim only if still open" check internally, where RLS
+    // visibility isn't in the way.
+    const { data, error } = await supabase.rpc('claim_slot', {
+      p_slot_id: slotId,
+      p_member_id: claimingMemberId,
+    })
 
-      const res = await fetch(url, {
-        method: 'PATCH',
-        headers: {
-          apikey: key,
-          Authorization: `Bearer ${key}`,
-          'Content-Type': 'application/json',
-          Prefer: 'return=representation',
-        },
-        body: JSON.stringify({
-          status: 'claimed',
-          claimed_by_member_id: claimingMemberId,
-          claimed_at: new Date().toISOString(),
-        }),
-      })
+    const result = data?.[0]
 
-      const bodyText = await res.text()
-
-      if (!res.ok) {
-        updateError = `HTTP ${res.status}: ${bodyText}`
-      } else {
-        const parsed = JSON.parse(bodyText || '[]')
-        if (!Array.isArray(parsed) || parsed.length === 0) {
-          updateError = `Fetch succeeded but matched 0 rows. Status ${res.status}, body: ${bodyText}`
-        }
-      }
-    } catch (err) {
-      updateError = err instanceof Error ? err.message : String(err)
-    }
-
-    if (updateError) {
-      redirect(`/claim/${slotId}?memberId=${claimingMemberId}&claimError=1&debugMsg=${encodeURIComponent(updateError)}`)
+    if (error || !result) {
+      console.error('Error claiming slot:', error)
+      redirect(`/claim/${slotId}?memberId=${claimingMemberId}&claimError=1`)
     }
 
     revalidatePath('/dashboard')
@@ -117,7 +95,7 @@ export default async function ClaimSlotPage({ params, searchParams }: ClaimPageP
   return (
     <div className="min-h-screen bg-slate-950 text-white flex items-center justify-center p-4 md:p-8">
       <div className="max-w-md w-full bg-slate-900 border border-slate-800 rounded-2xl p-6 md:p-8 space-y-6 shadow-2xl">
-        
+
         {/* Header */}
         <div className="text-center space-y-1">
           <span className="text-xs font-bold uppercase tracking-widest text-emerald-400">SpotFillr Alert</span>
@@ -143,22 +121,6 @@ export default async function ClaimSlotPage({ params, searchParams }: ClaimPageP
           </div>
         </div>
 
-        {/* Temporary diagnostic — comparing the URL's slotId against what the RPC read actually returned */}
-        <div className="text-[10px] font-mono text-slate-600 break-words space-y-0.5">
-          <div>URL slotId: &quot;{slotId}&quot; (len {slotId.length})</div>
-          <div>RPC slot.id: &quot;{slot.id}&quot; (len {String(slot.id).length})</div>
-          <div>RPC slot.status: &quot;{slot.status}&quot;</div>
-          <div>Match: {String(slot.id) === slotId ? 'YES' : 'NO'}</div>
-          <div>ENV url: &quot;{process.env.NEXT_PUBLIC_SUPABASE_URL}&quot;</div>
-          <div>
-            ENV key (first 25 + last 10): &quot;
-            {(process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '').slice(0, 25)}
-            ...
-            {(process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '').slice(-10)}
-            &quot; (len {(process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '').length})
-          </div>
-        </div>
-
         {/* Status / Claim Form */}
         {isClaimedByMe ? (
           <div className="bg-emerald-950/40 border border-emerald-800/80 rounded-xl p-4 text-center space-y-1">
@@ -175,15 +137,10 @@ export default async function ClaimSlotPage({ params, searchParams }: ClaimPageP
         ) : (
           <form action={claimSlotAction} className="space-y-4">
             {claimError && (
-              <div className="bg-rose-950/40 border border-rose-800/80 rounded-xl p-3 text-center space-y-1">
+              <div className="bg-rose-950/40 border border-rose-800/80 rounded-xl p-3 text-center">
                 <p className="text-rose-400 text-xs font-medium">
                   Something went wrong claiming this slot. Please try again.
                 </p>
-                {debugMsg && (
-                  <p className="text-rose-300/70 text-[10px] font-mono break-words">
-                    Debug: {debugMsg}
-                  </p>
-                )}
               </div>
             )}
             <p className="text-sm text-slate-300 text-center">
