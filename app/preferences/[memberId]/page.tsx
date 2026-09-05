@@ -8,6 +8,7 @@
 import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { toE164, maskPhone, sendVerificationCode, checkVerificationCode } from '@/lib/verify'
+import { sendOptInConfirmation } from '@/lib/sms'
 import { redirect } from 'next/navigation'
 
 export const dynamic = 'force-dynamic'
@@ -80,6 +81,11 @@ export default async function PreferencesPage({ params, searchParams }: Preferen
       console.error('Error confirming SMS opt-in:', error)
       redirect(`/preferences/${id}?error=${encodeURIComponent('Something went wrong saving that. Please try again.')}`)
     }
+
+    // Welcome text completing the double opt-in loop. Best-effort: if this
+    // fails (e.g. the A2P campaign isn't approved yet) the opt-in itself
+    // still stands -- consent was already verified and recorded above.
+    await sendOptInConfirmation(phoneE164)
 
     redirect(`/preferences/${id}?saved=1`)
   }

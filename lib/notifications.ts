@@ -1,6 +1,7 @@
 // lib/notifications.ts
 import { Resend } from 'resend'
 import type { SupabaseClient } from '@supabase/supabase-js'
+import { sendSms } from './sms'
 
 const resend = new Resend(process.env.RESEND_API_KEY)
 
@@ -115,14 +116,15 @@ export async function sendBroadcastNotification({
       console.error('Could not create short claim link, falling back to full URL:', linkError)
     }
 
-    const smsBody = `${headline}. Claim: ${smsUrl}`
+    // The "Reply STOP" suffix is required by CTIA and must match the
+    // sample messages registered with the A2P campaign. It costs 22
+    // characters; a typical message still lands near 102, well inside a
+    // single 160-character segment.
+    const smsBody = `${headline}. Claim: ${smsUrl} Reply STOP to opt out`
 
-    // TODO: replace with a real Twilio send now that A2P registration is approved.
-    console.log('\n================ [MOCK SMS SENT] ================')
-    console.log(`TO: ${recipient.phone}`)
-    console.log(`BODY: ${smsBody}`)
-    console.log(`LENGTH: ${smsBody.length} chars (1 segment if <=160)`)
-    console.log('==================================================\n')
+    // Best-effort: a failed text never blocks the emails above. Until the
+    // A2P campaign is approved, Twilio rejects these and sendSms logs it.
+    await sendSms(recipient.phone, smsBody)
   }
 
   return { success: true }
